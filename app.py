@@ -94,9 +94,23 @@ def parse_excel(file_bytes):
             })
     return report_date_iso, report_date_str, records
 
+# ── CORS HEADERS ─────────────────────────────────────────────────────────
+@app.after_request
+def add_cors(response):
+    response.headers['Access-Control-Allow-Origin']  = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
+
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path=''):
+    return jsonify({}), 200
+
 # ── ROUTES ────────────────────────────────────────────────────────────────
 
 @app.route('/')
+@app.route('/api/')
 def index():
     try:
         records_col, metadata_col = get_db()
@@ -125,6 +139,7 @@ def index():
     })
 
 @app.route('/health')
+@app.route('/api/health')
 def health():
     try:
         records_col, _ = get_db()
@@ -135,6 +150,7 @@ def health():
         return jsonify({"status": "error", "mongodb": str(e)}), 500
 
 @app.route('/upload', methods=['POST'])
+@app.route('/api/upload', methods=['POST'])
 def upload():
     if 'file' not in request.files:
         return jsonify({"error": "Send Excel as multipart key 'file'"}), 400
@@ -171,6 +187,7 @@ def upload():
     })
 
 @app.route('/records')
+@app.route('/api/records')
 def get_records():
     try:
         records_col, _ = get_db()
@@ -201,6 +218,7 @@ def get_records():
     return jsonify({"count": total, "records": recs})
 
 @app.route('/summary')
+@app.route('/api/summary')
 def get_summary():
     try:
         records_col, _ = get_db()
@@ -263,6 +281,7 @@ def get_summary():
     })
 
 @app.route('/departments')
+@app.route('/api/departments')
 def get_departments():
     try:
         records_col, _ = get_db()
@@ -298,6 +317,7 @@ def get_departments():
     return jsonify({"count": len(result), "departments": result})
 
 @app.route('/employees')
+@app.route('/api/employees')
 def get_employees():
     try:
         records_col, _ = get_db()
@@ -345,6 +365,7 @@ def get_employees():
     return jsonify({"count": len(result), "employees": result})
 
 @app.route('/reset', methods=['DELETE'])
+@app.route('/api/reset', methods=['DELETE'])
 def reset():
     try:
         records_col, metadata_col = get_db()
