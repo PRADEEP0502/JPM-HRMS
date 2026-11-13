@@ -6,5 +6,5 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: DATA_DIR
-        value: /tmp/hrms_data
+      - key: MONGO_URI
+        sync: false   # Set this manually in Render dashboard (paste Atlas URI)
