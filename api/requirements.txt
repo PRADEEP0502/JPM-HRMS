@@ -1,0 +1,4 @@
+flask==3.0.3
+pymongo==4.7.3
+xlrd==2.0.1
+dnspython==2.6.1
