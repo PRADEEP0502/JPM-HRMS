@@ -107,57 +107,60 @@ export const resetAttendanceData = () => {
 
 const avatarColors = ['mint', 'lavender', 'peach', 'blue', 'pink', 'yellow'];
 export const replaceAttendanceData = (
-  employeeRows: Array<{ employeeId: string; employeeName: string; department?: string | null; designation?: string | null; shift?: string | null; joiningDate?: string | null; employmentStatus?: string | null }>,
-  movementRows: Array<{
-    employeeId: string;
-    employeeName: string;
-    department?: string | null;
-    date: string;
-    firstIn?: string | null;
-    lastOut?: string | null;
-    workedMinutes: number;
-    lateMinutes: number;
-    earlyGoingMinutes: number;
-    status: string;
-    punches?: Array<{ sequence: number; time: string; type: 'IN' | 'OUT'; rawValue: string }>;
-  }>,
+  rawEmployeeRows: any,
+  rawMovementRows: any,
 ) => {
-  const mappedEmployees = employeeRows.map((employee, index) => {
-    const name = employee.employeeName.trim();
-    const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase();
+  const employeeRows: any[] = Array.isArray(rawEmployeeRows)
+    ? rawEmployeeRows
+    : (Array.isArray(rawEmployeeRows?.employees) ? rawEmployeeRows.employees : []);
+
+  const movementRows: any[] = Array.isArray(rawMovementRows)
+    ? rawMovementRows
+    : (Array.isArray(rawMovementRows?.records) ? rawMovementRows.records : []);
+
+  const mappedEmployees = employeeRows.map((emp, index) => {
+    const id = String(emp.employeeId || emp.ticket || emp.id || `EMP-${index}`);
+    const name = String(emp.employeeName || emp.name || id).trim();
+    const initials = name.split(/\s+/).slice(0, 2).map((part: string) => part[0] ?? '').join('').toUpperCase() || 'EM';
     return {
-      id: employee.employeeId,
+      id,
       name,
-      department: employee.department?.trim() || 'Unassigned',
-      title: employee.designation?.trim() || 'Employee',
+      department: emp.department?.trim() || emp.dept || 'Unassigned',
+      title: emp.designation?.trim() || emp.title || 'Employee',
       initials,
       color: avatarColors[index % avatarColors.length],
-      shift: employee.shift,
-      joiningDate: employee.joiningDate,
-      employmentStatus: employee.employmentStatus ?? 'ACTIVE',
+      shift: emp.shift || 'General',
+      joiningDate: emp.joiningDate || null,
+      employmentStatus: emp.employmentStatus ?? 'ACTIVE',
     };
   });
-  const employeeLookup = new Map(mappedEmployees.map((employee) => [employee.id, employee]));
-  employees = mappedEmployees;
-  attendanceRecords = movementRows.filter((movement) => employeeLookup.has(movement.employeeId)).map((movement) => {
-    const firstIn = movement.firstIn ? movement.firstIn.slice(11, 16) : '';
-    const lastOut = movement.lastOut ? movement.lastOut.slice(11, 16) : '';
-    const status: AttendanceStatus = movement.status === 'ABSENT' ? 'Absent'
-      : movement.status === 'INCOMPLETE' ? 'Missing punch'
-      : movement.status === 'NO_PUNCHES' ? 'No punching'
-      : movement.status === 'ON_DUTY' ? 'On duty'
-        : movement.status === 'LATE' ? 'Late'
-          : movement.earlyGoingMinutes > 0 ? 'Early out' : 'Present';
+  if (mappedEmployees.length > 0) {
+    employees = mappedEmployees;
+  }
+  attendanceRecords = movementRows.map((movement) => {
+    const empId = String(movement.employeeId || movement.ticket || movement.id || '');
+    const firstIn = movement.firstIn ? movement.firstIn.slice(11, 16) : (movement.in || '');
+    const lastOut = movement.lastOut ? movement.lastOut.slice(11, 16) : (movement.out || '');
+    const lateMin = Number(movement.lateMinutes ?? movement.late_min ?? 0);
+    const earlyMin = Number(movement.earlyGoingMinutes ?? movement.early_min ?? 0);
+    const hrs = Number(movement.workedMinutes ? (movement.workedMinutes / 60).toFixed(2) : (movement.hrs_decimal ?? 0));
+    const statusStr = String(movement.status || '').toUpperCase();
+    const status: AttendanceStatus = statusStr === 'ABSENT' ? 'Absent'
+      : statusStr === 'INCOMPLETE' ? 'Missing punch'
+      : statusStr === 'NO_PUNCHES' ? 'No punching'
+      : statusStr === 'ON_DUTY' ? 'On duty'
+      : lateMin > 0 ? 'Late'
+      : earlyMin > 0 ? 'Early out' : 'Present';
     return {
-      employeeId: movement.employeeId,
-      date: movement.date,
+      employeeId: empId,
+      date: movement.date || todayKey,
       firstIn,
       lastOut,
-      hours: Number((movement.workedMinutes / 60).toFixed(2)),
-      lateMinutes: movement.lateMinutes,
-      earlyMinutes: movement.earlyGoingMinutes,
+      hours: hrs,
+      lateMinutes: lateMin,
+      earlyMinutes: earlyMin,
       status,
-      punches: movement.punches,
+      punches: movement.punches || [],
     };
   });
 };

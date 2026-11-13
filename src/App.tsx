@@ -215,10 +215,10 @@ function App() {
         : Promise.resolve([] as ImportHistoryItem[]),
     ]).then(([summary, alerts, analytics, history]) => {
       if (!active) return;
-      setApiSummary(summary);
-      setApiAlerts(alerts);
-      setDepartmentAnalytics(analytics);
-      setImportHistory(history);
+      setApiSummary(summary && typeof summary === 'object' && !Array.isArray(summary) ? summary : null);
+      setApiAlerts(Array.isArray(alerts) ? alerts : (Array.isArray((alerts as any)?.alerts) ? (alerts as any).alerts : []));
+      setDepartmentAnalytics(Array.isArray(analytics) ? analytics : (Array.isArray((analytics as any)?.departments) ? (analytics as any).departments : []));
+      setImportHistory(Array.isArray(history) ? history : (Array.isArray((history as any)?.history) ? (history as any).history : []));
       setApiError('');
     }).catch((error: unknown) => {
       if (active) setApiError(error instanceof Error ? error.message : 'Dashboard summary could not be loaded.');
@@ -465,8 +465,6 @@ function App() {
     const authorization = basicAuthorization(username, password);
     try {
       const identity = await apiRequest<ApiIdentity>('/api/auth/me', authorization);
-      replaceAttendanceData([], []);
-      setDataVersion((version) => version + 1);
       setAuthHeader(authorization);
       setAuthIdentity(identity);
       const authorizedRole = identity.roles.includes('ROLE_HR') ? 'HR' : identity.roles.includes('ROLE_MD') ? 'MD' : 'Employee';
@@ -1014,15 +1012,15 @@ function WorkspaceView({
   const absentRecords = records.filter((record) => record.status === 'Absent');
   const missingRecords = records.filter((record) => record.status === 'Missing punch' || record.status === 'No punching' || (record.status !== 'Absent' && (!record.firstIn || !record.lastOut)));
   const earlyRecords = records.filter((record) => record.earlyMinutes > 0);
-  const alertItems = liveData ? apiAlerts.filter((item) => [item.employeeName, item.employeeId, item.type].some((value) => value.toLowerCase().includes(query))).map((item) => ({
-    employeeId: item.employeeId,
-    employeeName: item.employeeName,
-    department: item.department,
-    label: item.type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter: string) => letter.toUpperCase()),
-    detail: item.message,
-    date: item.date,
+  const alertItems = (liveData && Array.isArray(apiAlerts)) ? apiAlerts.filter((item) => item && [item.employeeName, item.employeeId, item.type].some((value) => (value || '').toLowerCase().includes(query))).map((item) => ({
+    employeeId: item.employeeId || '',
+    employeeName: item.employeeName || item.employeeId || '',
+    department: item.department || '',
+    label: (item.type || 'Alert').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter: string) => letter.toUpperCase()),
+    detail: item.message || '',
+    date: item.date || selectedDate,
     tone: item.severity === 'HIGH' ? 'rose' : item.severity === 'MEDIUM' ? 'amber' : 'blue',
-    icon: item.type.includes('PUNCH') ? Fingerprint : item.type.includes('LATE') ? Clock3 : item.type.includes('EARLY') ? LogOut : CircleAlert,
+    icon: (item.type || '').includes('PUNCH') ? Fingerprint : (item.type || '').includes('LATE') ? Clock3 : (item.type || '').includes('EARLY') ? LogOut : CircleAlert,
   })) : [
     ...missingRecords.map((record) => ({ employeeId: record.employeeId, employeeName: getEmployee(record.employeeId)?.name ?? record.employeeId, department: getEmployee(record.employeeId)?.department ?? '', date: record.date, label: record.status === 'No punching' ? 'No punch record' : 'Missing punch', detail: record.status === 'No punching' ? 'No punch values were supplied; verify the shift and attendance before marking absent.' : 'Punch in or punch out is unavailable.', tone: 'rose', icon: Fingerprint })),
     ...absentRecords.map((record) => ({ employeeId: record.employeeId, employeeName: getEmployee(record.employeeId)?.name ?? record.employeeId, department: getEmployee(record.employeeId)?.department ?? '', date: record.date, label: 'Absent', detail: 'No attendance was recorded for this employee.', tone: 'rose', icon: CircleAlert })),
@@ -1033,7 +1031,7 @@ function WorkspaceView({
   const weekly = getWeeklyTrendData(12, role === 'Employee' ? employees[0]?.id : undefined);
   const monthlyTrend = getMonthlyTrendData(6, role === 'Employee' ? employees[0]?.id : undefined);
   const departments = departmentData(selectedDate);
-  const departmentRows = departmentAnalytics.length ? departmentAnalytics.map((item) => ({
+  const departmentRows = Array.isArray(departmentAnalytics) && departmentAnalytics.length ? departmentAnalytics.map((item) => ({
     department: item.department,
     employeeCount: item.employeeCount,
     presentCount: item.presentCount,
@@ -1163,7 +1161,7 @@ function WorkspaceView({
       <div className="workspace-stats">
         <KpiCard icon={Users} label="Employees in scope" value={employees.length} foot="Employee master records" tone="green" />
         <KpiCard icon={CircleCheck} label="Present" value={records.filter((record) => record.status !== 'Absent' && record.status !== 'No punching').length} foot="Includes on-duty records" tone="green" />
-        <KpiCard icon={CircleAlert} label="Absent" value={departmentAnalytics.every((item) => item.absentCount !== null) && departmentAnalytics.length ? departmentAnalytics.reduce((sum, item) => sum + (item.absentCount ?? 0), 0) : null} foot="Requires schedule and imported date" tone="rose" />
+        <KpiCard icon={CircleAlert} label="Absent" value={Array.isArray(departmentAnalytics) && departmentAnalytics.length && departmentAnalytics.every((item) => item?.absentCount !== null && item?.absentCount !== undefined) ? departmentAnalytics.reduce((sum, item) => sum + (item?.absentCount ?? 0), 0) : null} foot="Requires schedule and imported date" tone="rose" />
         <KpiCard icon={Clock3} label="Late arrivals" value={lateRecords.length} foot="Flagged in attendance data" tone="amber" />
       </div>
       <section className="panel workspace-panel">
