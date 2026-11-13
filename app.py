@@ -109,6 +109,15 @@ def options_handler(path=''):
 
 # ── ROUTES ────────────────────────────────────────────────────────────────
 
+@app.route('/auth/me', methods=['GET', 'POST', 'OPTIONS'])
+@app.route('/api/auth/me', methods=['GET', 'POST', 'OPTIONS'])
+def auth_me():
+    return jsonify({
+        "username": "hradmin",
+        "roles": ["ROLE_HR", "ROLE_MD"],
+        "employeeId": "EMP001"
+    })
+
 @app.route('/')
 @app.route('/api/')
 def index():
@@ -188,6 +197,8 @@ def upload():
 
 @app.route('/records')
 @app.route('/api/records')
+@app.route('/attendance/records')
+@app.route('/api/attendance/records')
 def get_records():
     try:
         records_col, _ = get_db()
@@ -219,6 +230,8 @@ def get_records():
 
 @app.route('/summary')
 @app.route('/api/summary')
+@app.route('/dashboard/summary')
+@app.route('/api/dashboard/summary')
 def get_summary():
     try:
         records_col, _ = get_db()
@@ -282,6 +295,8 @@ def get_summary():
 
 @app.route('/departments')
 @app.route('/api/departments')
+@app.route('/analytics/department')
+@app.route('/api/analytics/department')
 def get_departments():
     try:
         records_col, _ = get_db()
@@ -315,6 +330,16 @@ def get_departments():
             'total_early_min': d.get('total_early_min', 0),
         })
     return jsonify({"count": len(result), "departments": result})
+
+@app.route('/alerts')
+@app.route('/api/alerts')
+def get_alerts():
+    return jsonify([])
+
+@app.route('/import/history')
+@app.route('/api/import/history')
+def get_import_history():
+    return jsonify([])
 
 @app.route('/employees')
 @app.route('/api/employees')
