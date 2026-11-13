@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+monthly_data/
+output/
+*.xlsx
+*.xls
+.DS_Store
