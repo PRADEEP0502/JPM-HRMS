@@ -37,17 +37,23 @@ MASTER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'employee
 
 def _seed_employee_master():
     """Add any employee from employee_master.json that is not in Mongo yet.
-    Existing employees (incl. ones edited/added from the app) are never overwritten."""
+    Existing employees (incl. ones edited/added from the app) are never overwritten,
+    except that an entry marked "active": false in the file is always deactivated
+    (that is how someone who left is removed from the absent check)."""
     col = _db['employee_master']
     col.create_index([('ticket', ASCENDING)], unique=True)
     if not os.path.exists(MASTER_FILE):
         return
     with open(MASTER_FILE, encoding='utf-8') as fh:
         rows = json.load(fh)
-    ops = [UpdateOne({'ticket': str(r['ticket']).strip()},
-                     {'$setOnInsert': {'ticket': str(r['ticket']).strip(), 'name': r['name'].strip(),
-                                       'dept': r['dept'].strip(), 'active': True}},
-                     upsert=True) for r in rows]
+    ops = []
+    for r in rows:
+        ticket = str(r['ticket']).strip()
+        base = {'ticket': ticket, 'name': r['name'].strip(), 'dept': r['dept'].strip()}
+        if r.get('active') is False:
+            ops.append(UpdateOne({'ticket': ticket}, {'$set': {'active': False}, '$setOnInsert': base}, upsert=True))
+        else:
+            ops.append(UpdateOne({'ticket': ticket}, {'$setOnInsert': {**base, 'active': True}}, upsert=True))
     if ops:
         col.bulk_write(ops, ordered=False)
 

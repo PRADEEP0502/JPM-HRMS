@@ -157,6 +157,7 @@ function App() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [kpiDetail, setKpiDetail] = useState<string | null>(null);
+  const [deptDetail, setDeptDetail] = useState<string | null>(null);
   const [shiftName, setShiftName] = useState('');
   const [shiftStart, setShiftStart] = useState('08:30');
   const [shiftEnd, setShiftEnd] = useState('17:30');
@@ -807,12 +808,12 @@ function App() {
               </div>
               {role !== 'Employee' && <div className="panel dept-panel">
                 <div className="panel-heading">
-                  <div><h3>Department attendance</h3><p>How many came in, out of each department’s employees</p></div>
+                  <div><h3>Department attendance</h3><p>How many came in, out of each department’s employees · click a department to see who</p></div>
                   <div className="chart-legend dept-legend"><span><i className="legend-dot" style={{ background: '#3f8a66' }} /> 90%+</span><span><i className="legend-dot" style={{ background: '#d9a441' }} /> 75–89%</span><span><i className="legend-dot" style={{ background: '#c2553f' }} /> Below 75%</span></div>
                 </div>
                 <div className="department-chart" style={{ height: Math.max(120, departmentsToday.length * 30 + 10) }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={departmentsToday.map((item) => ({ ...item, label: `${item.rate}%  ·  ${item.present}/${item.total}` }))} layout="vertical" margin={{ top: 2, right: 96, bottom: 0, left: 0 }}>
+                    <BarChart data={departmentsToday.map((item) => ({ ...item, label: `${item.rate}%  ·  ${item.present}/${item.total}` }))} layout="vertical" margin={{ top: 2, right: 96, bottom: 0, left: 0 }} style={{ cursor: 'pointer' }} onClick={(state) => { if (state?.activeLabel) setDeptDetail(String(state.activeLabel)); }}>
                       <CartesianGrid stroke="#edf1ee" horizontal={false} />
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis type="category" dataKey="department" width={124} interval={0} axisLine={false} tickLine={false} tick={{ fill: '#3c4a42', fontSize: 12.5 }} />
@@ -1035,6 +1036,46 @@ function App() {
           <div className="modal-actions"><button className="button-secondary" onClick={() => setKpiDetail(null)}>Close</button></div>
         </section>
       </div>}
+      {deptDetail && (() => {
+        const team = employees.filter((employee) => employee.department === deptDetail);
+        const dayRecords = new Map(getRecordsForDate(selectedDate).map((record) => [record.employeeId, record]));
+        const rows = team.map((employee) => ({ employee, record: dayRecords.get(employee.id) }));
+        const came = rows.filter(({ record }) => record && record.status !== 'Absent' && record.status !== 'No punching')
+          .sort((a, b) => (a.record!.firstIn || '99').localeCompare(b.record!.firstIn || '99'));
+        const absentRows = rows.filter(({ record }) => !record || record.status === 'Absent' || record.status === 'No punching')
+          .sort((a, b) => a.employee.name.localeCompare(b.employee.name));
+        const lateCount = came.filter(({ record }) => record!.lateMinutes > 0).length;
+        const openEmployee = (id: string) => { setDeptDetail(null); setSelectedEmployee(id); };
+        return <div className="modal-backdrop" onClick={() => setDeptDetail(null)}>
+          <section className="import-modal dept-modal" role="dialog" aria-modal="true" aria-labelledby="dept-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-top"><div><h2 id="dept-title">{deptDetail}</h2><p className="modal-description">Attendance on {formatDate(selectedDate)} · {team.length} employees</p></div><button className="icon-button" onClick={() => setDeptDetail(null)} aria-label="Close department details"><X size={18} /></button></div>
+            <div className="dept-stats">
+              <span className="dept-stat present"><strong>{came.length}</strong> Present</span>
+              <span className="dept-stat absent"><strong>{absentRows.length}</strong> Absent</span>
+              <span className="dept-stat late"><strong>{lateCount}</strong> Late</span>
+            </div>
+            <div className="dept-columns">
+              <div className="dept-column">
+                <h3 className="dept-column-title absent"><CircleAlert size={15} /> Absent ({absentRows.length})</h3>
+                {absentRows.length ? <ul className="dept-list">{absentRows.map(({ employee }) => <li key={employee.id}>
+                  <button onClick={() => openEmployee(employee.id)}><span className="dept-person"><strong>{employee.name}</strong><small>ID {employee.id}</small></span><span className="status-pill absent"><i />Absent</span></button>
+                </li>)}</ul> : <p className="dept-empty">Everyone came in. 🎉</p>}
+              </div>
+              <div className="dept-column">
+                <h3 className="dept-column-title present"><CircleCheck size={15} /> Present ({came.length})</h3>
+                {came.length ? <ul className="dept-list">{came.map(({ employee, record }) => <li key={employee.id}>
+                  <button onClick={() => openEmployee(employee.id)}>
+                    <span className="dept-person"><strong>{employee.name}</strong><small>ID {employee.id} · In {record!.firstIn || '—'} · Out {record!.lastOut || '—'} · {record!.hours}h</small></span>
+                    {record!.lateMinutes > 0 ? <span className="status-pill late"><i />{record!.lateMinutes}m late</span> : <span className="status-pill present"><i />On time</span>}
+                  </button>
+                </li>)}</ul> : <p className="dept-empty">Nobody from this department came in.</p>}
+              </div>
+            </div>
+            <p className="form-hint">Tap a name to see that employee’s last 30 days.</p>
+            <div className="modal-actions"><button className="button-secondary" onClick={() => setDeptDetail(null)}>Close</button></div>
+          </section>
+        </div>;
+      })()}
       {selectedEmployee && <EmployeeTimeline employee={employees.find((employee) => employee.id === selectedEmployee)} records={attendanceRecords.filter((record) => record.employeeId === selectedEmployee).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)} onClose={() => setSelectedEmployee(null)} />}
     </div>
   );

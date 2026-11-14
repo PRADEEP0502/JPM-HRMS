@@ -146,6 +146,32 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 /* Department chart lists every department, so give it the full row */
 .chart-grid .trend-panel, .chart-grid .dept-panel { grid-column: 1 / -1; }
 .dept-legend { min-height: 0; font-size: 12px; }
+.department-chart .recharts-bar-rectangle:hover, .department-chart .recharts-bar-background-rectangle:hover { opacity: .85; }
+
+/* ---- Department detail popup (who is present / absent) ---- */
+.dept-modal { width: min(880px, 100%); }
+.dept-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.dept-stat { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 14px; border-radius: 999px; font-size: 13.5px; font-weight: 600; }
+.dept-stat strong { font: 600 20px var(--heading); }
+.dept-stat.present { background: var(--green-soft); color: var(--green-dark); }
+.dept-stat.absent { background: #fdecea; color: #b42318; }
+.dept-stat.late { background: #fdf3df; color: #8a5a0b; }
+.dept-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.dept-column { min-width: 0; }
+.dept-column-title { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font: 700 14px "DM Sans", sans-serif; }
+.dept-column-title.absent { color: #b42318; }
+.dept-column-title.present { color: var(--green-dark); }
+.dept-list { max-height: min(48vh, 420px); overflow: auto; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 16px; }
+.dept-list li + li { border-top: 1px solid var(--line); }
+.dept-list button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; border: 0; background: transparent; text-align: left; }
+.dept-list button:hover { background: var(--surface-soft); }
+.dept-person { min-width: 0; }
+.dept-person strong, .dept-person small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dept-person strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.dept-person small { margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.dept-list .status-pill { flex: 0 0 auto; }
+.dept-empty { margin: 0; padding: 18px; border: 1px dashed var(--line-strong); border-radius: 16px; color: var(--muted); font-size: 13.5px; text-align: center; }
+@media (max-width: 700px) { .dept-columns { grid-template-columns: minmax(0, 1fr); } }
 .department-chart { margin-top: 16px; }
 .green-dot { background: #2f6b4f; }
 .mint-dot { background: #a9cdb8; }

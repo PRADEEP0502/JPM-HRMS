@@ -1,5 +1,5 @@
 [
-  {"ticket": "1919", "name": "ADHIMOOLAPERUMAL", "dept": "CANTEEN"},
+  {"ticket": "1919", "name": "ADHIMOOLAPERUMAL", "dept": "CANTEEN", "active": false},
   {"ticket": "1824", "name": "MOHAMED WAHID", "dept": "Chemical"},
   {"ticket": "1826", "name": "ABILASH", "dept": "Chemical"},
   {"ticket": "5105", "name": "DURAI K", "dept": "GARDEN"},
@@ -30,7 +30,7 @@
   {"ticket": "1667", "name": "JEYA SURIYA.X", "dept": "Office"},
   {"ticket": "1772", "name": "ROJA DEVI.S", "dept": "Office"},
   {"ticket": "1875", "name": "GOMATHI.I", "dept": "Office"},
-  {"ticket": "1917", "name": "RAJENDRAN. M", "dept": "Office"},
+  {"ticket": "1917", "name": "RAJENDRAN. M", "dept": "Office", "active": false},
   {"ticket": "1995", "name": "SAKTHI KIRUTHIGA", "dept": "Office"},
   {"ticket": "2008", "name": "DHANABAVATHARANI", "dept": "Office"},
   {"ticket": "2033", "name": "ROSELIN", "dept": "Office"},
