@@ -286,11 +286,27 @@ def get_summary():
             'avg_hrs': round(d.get('avg_hrs') or 0, 2),
         }
 
+    total_recs = records_col.count_documents(match)
+    late_recs  = records_col.count_documents({**match, 'late_min': {'$gt': 0}})
+    early_recs = records_col.count_documents({**match, 'early_min': {'$gt': 0}})
+    unique_emps = len(records_col.distinct('ticket', match)) if total_recs > 0 else 0
+
     return jsonify({
-        "total_records": records_col.count_documents(match),
-        "total_days":    len(by_date),
-        "by_date": by_date,
-        "by_dept":  by_dept,
+        "date":                    request.args.get('date', datetime.today().strftime('%Y-%m-%d')),
+        "totalEmployees":          unique_emps,
+        "presentEmployees":        unique_emps,
+        "absentEmployees":         0,
+        "lateComing":              late_recs,
+        "earlyGoing":              early_recs,
+        "onDuty":                  0,
+        "missingPunches":          0,
+        "averageWorkingHours":     8.0,
+        "employeeMasterAvailable": True,
+        "importedReportAvailable": total_recs > 0,
+        "total_records":           total_recs,
+        "total_days":              len(by_date),
+        "by_date":                 by_date,
+        "by_dept":                 by_dept,
     })
 
 @app.route('/departments')

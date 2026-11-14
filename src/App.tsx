@@ -235,18 +235,18 @@ function App() {
     : visibleRecords.length > 0;
   const total = apiSummary?.totalEmployees ?? (role === 'Employee' ? Number(employees.length > 0) : employees.length);
   const present = hasAttendanceData
-    ? apiSummary?.presentEmployees ?? visibleRecords.filter((record) => record.status !== 'Absent' && record.status !== 'No punching').length
+    ? (apiSummary?.presentEmployees ?? visibleRecords.filter((record) => record.status !== 'Absent' && record.status !== 'No punching').length)
     : null;
-  const absent = apiSummary ? apiSummary.absentEmployees : visibleRecords.filter((record) => record.status === 'Absent').length;
-  const late = hasAttendanceData ? apiSummary?.lateComing ?? visibleRecords.filter((record) => record.lateMinutes > 0).length : null;
-  const early = hasAttendanceData ? apiSummary?.earlyGoing ?? visibleRecords.filter((record) => record.earlyMinutes > 0).length : null;
-  const onDuty = hasAttendanceData ? apiSummary?.onDuty ?? visibleRecords.filter((record) => record.status === 'On duty').length : null;
-  const missingPunchCount = hasAttendanceData ? apiSummary?.missingPunches ?? visibleRecords.filter((record) => record.status === 'Missing punch' || record.status === 'No punching').length : null;
+  const absent = apiSummary ? (apiSummary.absentEmployees ?? null) : visibleRecords.filter((record) => record.status === 'Absent').length;
+  const late = hasAttendanceData ? (apiSummary?.lateComing ?? visibleRecords.filter((record) => record.lateMinutes > 0).length) : null;
+  const early = hasAttendanceData ? (apiSummary?.earlyGoing ?? visibleRecords.filter((record) => record.earlyMinutes > 0).length) : null;
+  const onDuty = hasAttendanceData ? (apiSummary?.onDuty ?? visibleRecords.filter((record) => record.status === 'On duty').length) : null;
+  const missingPunchCount = hasAttendanceData ? (apiSummary?.missingPunches ?? visibleRecords.filter((record) => record.status === 'Missing punch' || record.status === 'No punching').length) : null;
   const workedRecords = visibleRecords.filter((record) => record.hours > 0);
   const averageHours = hasAttendanceData
-    ? apiSummary?.averageWorkingHours ?? (workedRecords.length
+    ? (apiSummary?.averageWorkingHours ?? (workedRecords.length
       ? Number((workedRecords.reduce((sum, record) => sum + record.hours, 0) / workedRecords.length).toFixed(2))
-      : null)
+      : null))
     : null;
   const attendanceRate = hasAttendanceData && total && present !== null ? Math.round((present / total) * 100) : null;
 
@@ -1174,7 +1174,7 @@ function WorkspaceView({
       <section className="panel workspace-panel import-history-panel">
         <div className="workspace-panel-heading"><div><h2>Import history</h2><p>Source file, result and validation totals</p></div><span className="workspace-count">{importHistory.length} imports</span></div>
         <div className="table-scroll"><table><thead><tr><th>FILE</th><th>TYPE</th><th>IMPORTED BY</th><th>DATE</th><th>VALID</th><th>REJECTED</th><th>DUPLICATES</th><th>STATUS</th></tr></thead><tbody>
-          {importHistory.map((item) => <tr key={item.id}><td>{item.filename}</td><td>{item.fileType}</td><td>{item.uploadedBy}</td><td>{new Date(item.createdAt).toLocaleString()}</td><td>{item.validRows}</td><td>{item.rejectedRows}</td><td>{item.duplicateRows}</td><td><span className={`status-pill ${item.status === 'COMMITTED' ? 'present' : item.status === 'PARTIAL' ? 'late' : 'absent'}`}><i />{item.status}</span></td></tr>)}
+          {importHistory.map((item) => <tr key={item.id}><td>{item.filename}</td><td>{item.fileType}</td><td>{item.uploadedBy}</td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}</td><td>{item.validRows}</td><td>{item.rejectedRows}</td><td>{item.duplicateRows}</td><td><span className={`status-pill ${item.status === 'COMMITTED' ? 'present' : item.status === 'PARTIAL' ? 'late' : 'absent'}`}><i />{item.status}</span></td></tr>)}
           {!importHistory.length && <tr><td className="empty-table" colSpan={8}>No report imports have been recorded.</td></tr>}
         </tbody></table></div>
       </section>
@@ -1223,11 +1223,14 @@ function WorkspaceView({
 }
 
 function KpiCard({ icon: Icon, label, value, foot, tone, suffix = '', onClick }: {
-  icon: typeof Users; label: string; value: number | null; foot: string; tone: string; suffix?: string; onClick?: () => void;
+  icon: typeof Users; label: string; value: number | null | undefined; foot: string; tone: string; suffix?: string; onClick?: () => void;
 }) {
+  const displayValue = (value === null || value === undefined || isNaN(Number(value)))
+    ? '—'
+    : `${Number(value).toLocaleString('en-IN')}${suffix}`;
   const body = <>
     <div className="kpi-top"><div className="kpi-label">{label}</div><span className={`kpi-icon ${tone}`}><Icon size={17} strokeWidth={1.9} /></span></div>
-    <div className="kpi-value">{value === null ? '—' : `${value.toLocaleString('en-IN')}${suffix}`}</div>
+    <div className="kpi-value">{displayValue}</div>
     <div className="kpi-foot">{foot}</div>
   </>;
   return onClick
