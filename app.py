@@ -82,68 +82,148 @@ def absent_records(dates, dept=None, search=None):
                              'hrs_decimal': 0, 'worked_hrs': ''})
     return rows
 
-# ── CONSTANTS ─────────────────────────────────────────────────────────────
-SKIP_FOOTERS = {f'page {i} of 5' for i in range(1, 6)}
-SKIP_HEADERS = {
-    'sno', 'ticketno', 'empname', 'date', 'in', 'lunch', 'time1', 'time2',
-    'worked hrs', 'late', 'earler', 'daily movement register',
-    'junior processing mill'
-}
+# ── EXCEL PARSER (eSSL "Daily Movement Register") ───────────────────────
+# Works for both layouts seen so far:
+#  * original export: ~34 columns, title "DAILY MOVEMENT REGISTER dd-mm-yyyy", merged cells
+#  * re-saved "DM TODAY" style: ~19 columns, header on row 0, headers shifted by one
+# Columns are found by content, not fixed positions:
+#  "HH:MM Hrs" cell = worked hours; the next three numbers after it are late-in,
+#  lunch-late and early-going minutes; cells like "7:56 AM-I" are punches.
+WORKED_RE     = re.compile(r'^\s*(\d+):(\d+)\s*Hrs\s*$', re.I)
+PUNCH_RE      = re.compile(r'^\s*(\d{1,2}):(\d{2})\s*(AM|PM)?\s*-\s*(I|O)\s*$', re.I)
+TITLE_DATE_RE = re.compile(r'(\d{2}-\d{2}-\d{4})')
+DAY_NAMES     = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
+NOT_DEPARTMENTS = {'in', 'lunch', 'late', 'earler', 'workedhrs', 'dailymovementregister', 'juniorprocessingmill'}
 
-# ── HELPERS ───────────────────────────────────────────────────────────────
+def _norm(v):
+    return re.sub(r'[^a-z0-9]', '', str(v).lower())
+
+def _punch_24h(cell):
+    m = PUNCH_RE.match(str(cell))
+    if not m:
+        return None
+    h, mi, ampm, kind = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4).upper()
+    if ampm:
+        h = h % 12 + (12 if ampm.upper() == 'PM' else 0)
+    return f'{h:02d}:{mi:02d}', ('IN' if kind == 'I' else 'OUT'), str(cell).strip()
+
+def _cell_date(v, datemode):
+    if isinstance(v, float) and 20000 < v < 80000:
+        return xlrd.xldate_as_datetime(v, datemode).strftime('%Y-%m-%d')
+    m = re.match(r'^\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\s*$', str(v))
+    if m:
+        try:
+            return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1))).strftime('%Y-%m-%d')
+        except ValueError:
+            return None
+    return None
+
 def parse_excel(file_bytes):
-    wb  = xlrd.open_workbook(file_contents=file_bytes)
-    ws  = wb.sheet_by_index(0)
+    """Return (first_date_iso, first_date_label, records). Raises ValueError with a clear message."""
+    try:
+        wb = xlrd.open_workbook(file_contents=file_bytes)
+    except Exception:
+        raise ValueError('This is not a readable Excel (.xls) file. Export the Daily Movement Register from eSSL as .xls and try again.')
+    ws = wb.sheet_by_index(0)
 
-    title_row  = str(ws.row_values(4)[0]).strip()
-    date_match = re.search(r'(\d{2}-\d{2}-\d{4})', title_row)
-    if date_match:
-        report_date_str = date_match.group(1)
-        report_date_iso = datetime.strptime(report_date_str, '%d-%m-%Y').strftime('%Y-%m-%d')
-    else:
-        report_date_iso = datetime.today().strftime('%Y-%m-%d')
-        report_date_str = datetime.today().strftime('%d-%m-%Y')
+    # 1. Header row must contain TicketNo + EmpName (salary statements use "Emp ID", so they are rejected)
+    header_idx = ticket_col = name_col = date_col = None
+    for r in range(min(ws.nrows, 25)):
+        cells = [_norm(v) for v in ws.row_values(r)]
+        if 'ticketno' in cells and 'empname' in cells:
+            header_idx, ticket_col, name_col = r, cells.index('ticketno'), cells.index('empname')
+            date_col = cells.index('date') if 'date' in cells else None
+            break
+    if header_idx is None:
+        raise ValueError('This file is not a Daily Movement Register. Upload the eSSL attendance report '
+                         '(TicketNo, EmpName, Date, Time1... and Worked Hrs columns). Salary statements cannot be imported here.')
 
-    records, current_dept = [], None
+    # 2. Fallback date from a title like "DAILY MOVEMENT REGISTER 02-11-2026 To 02-11-2026"
+    title_date = None
+    for r in range(min(ws.nrows, 12)):
+        m = TITLE_DATE_RE.search(' '.join(str(v) for v in ws.row_values(r)))
+        if m:
+            title_date = datetime.strptime(m.group(1), '%d-%m-%Y').strftime('%Y-%m-%d')
+            break
 
-    for r in range(6, ws.nrows):
-        row       = ws.row_values(r)
+    records, current_dept, seen = [], None, set()
+    for r in range(header_idx + 1, ws.nrows):
+        row = ws.row_values(r)
         non_empty = [v for v in row if v != '' and v is not None]
         if not non_empty:
             continue
-        if len(non_empty) == 1:
-            val = str(non_empty[0]).strip()
-            if (val.lower() not in SKIP_HEADERS
-                    and val.lower() not in SKIP_FOOTERS
-                    and not val.replace('.', '').isdigit()):
+        # Department heading = a row with a single text cell (skip sub-headers and "Page 1 of 5")
+        if len(non_empty) == 1 and isinstance(non_empty[0], str):
+            val = non_empty[0].strip()
+            if val and not re.match(r'^page\b', val, re.I) and _norm(val) not in NOT_DEPARTMENTS:
                 current_dept = val
-                continue
-        sno = row[0]
-        if isinstance(sno, float) and sno > 0:
-            ticket_no  = str(row[2]).strip()  if row[2]  != '' else ''
-            emp_name   = str(row[3]).strip()  if row[3]  != '' else ''
-            day_name   = str(row[7]).strip()  if row[7]  != '' else ''
-            worked_hrs = str(row[27]).strip() if row[27] != '' else ''
-            late_in    = float(row[30]) if isinstance(row[30], float) else 0.0
-            early_out  = float(row[31]) if isinstance(row[31], float) else 0.0
-            hrs_decimal = 0.0
-            hm = re.match(r'(\d+):(\d+)\s*Hrs', worked_hrs)
-            if hm:
-                hrs_decimal = int(hm.group(1)) + int(hm.group(2)) / 60.0
-            records.append({
-                'date':        report_date_iso,
-                'date_label':  report_date_str,
-                'day':         day_name,
-                'dept':        current_dept or 'Unknown',
-                'ticket':      ticket_no,
-                'name':        emp_name,
-                'worked_hrs':  worked_hrs,
-                'hrs_decimal': round(hrs_decimal, 2),
-                'late_min':    int(late_in),
-                'early_min':   int(early_out),
-                'created_at':  datetime.utcnow(),
-            })
-    return report_date_iso, report_date_str, records
+            continue
+
+        ticket = row[ticket_col] if ticket_col < len(row) else ''
+        name   = row[name_col]   if name_col   < len(row) else ''
+        if isinstance(ticket, float) and ticket.is_integer():
+            ticket = str(int(ticket))
+        ticket, name = str(ticket).strip(), str(name).strip()
+        # Employee rows have a ticket and a real name (the second sub-row only holds numbers)
+        if not ticket or not re.search(r'[A-Za-z]', name):
+            continue
+
+        # Date: per-row value near the Date column, else the title date
+        date_iso = None
+        if date_col is not None:
+            for c in (date_col, date_col - 1, date_col + 1, date_col - 2, date_col + 2):
+                if 0 <= c < len(row):
+                    date_iso = _cell_date(row[c], wb.datemode)
+                    if date_iso:
+                        break
+        date_iso = date_iso or title_date
+        if not date_iso or (ticket, date_iso) in seen:
+            continue
+        seen.add((ticket, date_iso))
+
+        worked_idx = next((i for i, v in enumerate(row) if WORKED_RE.match(str(v))), None)
+        worked_hrs, hrs_decimal, late_in, lunch_late, early_out = '', 0.0, 0, 0, 0
+        if worked_idx is not None:
+            worked_hrs = str(row[worked_idx]).strip()
+            m = WORKED_RE.match(worked_hrs)
+            hrs_decimal = int(m.group(1)) + int(m.group(2)) / 60.0
+            nums = [v for v in row[worked_idx + 1:] if isinstance(v, float)]
+            late_in    = int(nums[0]) if len(nums) > 0 else 0
+            lunch_late = int(nums[1]) if len(nums) > 1 else 0
+            early_out  = int(nums[2]) if len(nums) > 2 else 0
+
+        punches = []
+        for v in row[:worked_idx if worked_idx is not None else len(row)]:
+            p = _punch_24h(v)
+            if p:
+                punches.append({'sequence': len(punches) + 1, 'time': f'{date_iso}T{p[0]}:00',
+                                'type': p[1], 'rawValue': p[2]})
+        first_in = next((p['time'][11:16] for p in punches if p['type'] == 'IN'), '')
+        last_out = next((p['time'][11:16] for p in reversed(punches) if p['type'] == 'OUT'), '')
+        day_name = next((str(v).strip() for v in row if str(v).strip() in DAY_NAMES), '')
+
+        records.append({
+            'date':           date_iso,
+            'date_label':     datetime.strptime(date_iso, '%Y-%m-%d').strftime('%d-%m-%Y'),
+            'day':            day_name,
+            'dept':           current_dept or 'Unknown',
+            'ticket':         ticket,
+            'name':           name,
+            'worked_hrs':     worked_hrs,
+            'hrs_decimal':    round(hrs_decimal, 2),
+            'late_min':       late_in,
+            'lunch_late_min': lunch_late,
+            'early_min':      early_out,
+            'in':             first_in,
+            'out':            last_out,
+            'punches':        punches,
+            'created_at':     datetime.utcnow(),
+        })
+
+    if not records:
+        raise ValueError('No employee rows were found in this report. Check that it is the eSSL Daily Movement Register.')
+    first = min(r['date'] for r in records)
+    return first, datetime.strptime(first, '%Y-%m-%d').strftime('%d-%m-%Y'), records
 
 # ── CORS HEADERS ─────────────────────────────────────────────────────────
 @app.after_request
@@ -220,21 +300,14 @@ def upload():
 
     try:
         date_iso, date_str, new_records = parse_excel(f.read())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
     except Exception as e:
         return jsonify({"error": f"Parse failed: {str(e)}"}), 422
 
     try:
-        records_col, metadata_col = get_db()
-        deleted = records_col.delete_many({'date': date_iso})
-        if new_records:
-            records_col.insert_many(new_records)
-        metadata_col.update_one(
-            {'date': date_iso},
-            {'$set': {'date': date_iso, 'date_label': date_str,
-                      'record_count': len(new_records),
-                      'uploaded_at': datetime.utcnow()}},
-            upsert=True
-        )
+        records_col, _ = get_db()
+        save_report_records(new_records)
     except Exception as e:
         return jsonify({"error": f"DB error: {str(e)}"}), 500
 
@@ -246,6 +319,22 @@ def upload():
         "total_records": records_col.count_documents({}),
     })
 
+def save_report_records(records):
+    """Replace stored records for every date in this report and mark those dates as imported."""
+    records_col, metadata_col = get_db()
+    by_date = defaultdict(list)
+    for r in records:
+        by_date[r['date']].append({k: v for k, v in r.items() if k != '_id'})
+    for d, rows in by_date.items():
+        records_col.delete_many({'date': d})
+        records_col.insert_many(rows)
+        metadata_col.update_one(
+            {'date': d},
+            {'$set': {'date': d, 'date_label': rows[0]['date_label'],
+                      'record_count': len(rows), 'uploaded_at': datetime.utcnow()}},
+            upsert=True
+        )
+
 # ── IMPORT PREVIEW / COMMIT (used by the React frontend) ─────────────────
 def _pending_col():
     get_db()
@@ -255,14 +344,15 @@ def _preview_payload(doc, status):
     rows = []
     for i, r in enumerate(doc['records'], start=1):
         worked = int(round(r.get('hrs_decimal', 0) * 60))
+        punches = r.get('punches', [])
         rows.append({
             "sourceRow": i,
             "employeeId": r.get('ticket', ''),
             "employeeName": r.get('name', ''),
             "date": r.get('date'),
-            "punches": [],
-            "firstIn": None,
-            "lastOut": None,
+            "punches": punches,
+            "firstIn": next((p['time'] for p in punches if p['type'] == 'IN'), None),
+            "lastOut": next((p['time'] for p in reversed(punches) if p['type'] == 'OUT'), None),
             "workedMinutes": worked,
             "lateMinutes": r.get('late_min', 0),
             "earlyMinutes": r.get('early_min', 0),
@@ -280,7 +370,7 @@ def _preview_payload(doc, status):
         "validRows": len(rows),
         "rejectedRows": 0,
         "duplicateRows": 0,
-        "reportDates": [doc['date_iso']],
+        "reportDates": sorted({r['date'] for r in doc['records']}),
         "rows": rows,
         "messages": [],
     }
@@ -293,6 +383,8 @@ def import_excel_preview():
         return jsonify({"message": "Send the Excel file as multipart field 'file'."}), 400
     try:
         date_iso, date_str, records = parse_excel(f.read())
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 422
     except Exception as e:
         return jsonify({"message": f"Could not read the Excel report: {e}"}), 422
     try:
@@ -322,17 +414,7 @@ def import_commit(import_id):
         doc = pending.find_one({'_id': import_id})
         if doc is None:
             return jsonify({"message": "Import preview not found or already committed. Upload the file again."}), 404
-        records_col, metadata_col = get_db()
-        records_col.delete_many({'date': doc['date_iso']})
-        if doc['records']:
-            records_col.insert_many([{k: v for k, v in r.items() if k != '_id'} for r in doc['records']])
-        metadata_col.update_one(
-            {'date': doc['date_iso']},
-            {'$set': {'date': doc['date_iso'], 'date_label': doc['date_label'],
-                      'record_count': len(doc['records']),
-                      'uploaded_at': datetime.utcnow()}},
-            upsert=True
-        )
+        save_report_records(doc['records'])
         pending.delete_one({'_id': import_id})
     except Exception as e:
         return jsonify({"message": f"DB error: {e}"}), 500
