@@ -7,7 +7,7 @@ import {
   CalendarClock, CircleAlert, CircleCheck, UserPlus, KeyRound, Timer, FileSpreadsheet, SlidersHorizontal, Leaf,
 } from 'lucide-react';
 import {
-  Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ReferenceLine,
+  Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
@@ -807,23 +807,24 @@ function App() {
               </div>
               {role !== 'Employee' && <div className="panel dept-panel">
                 <div className="panel-heading">
-                  <div><h3>Department attendance</h3><p>Attendance rate by department</p></div>
-                  <button className="more-button" aria-label="Department chart options" onClick={() => showNotice('Showing attendance rates for the selected date.')}><MoreHorizontal size={19} /></button>
+                  <div><h3>Department attendance</h3><p>How many came in, out of each department’s employees</p></div>
+                  <div className="chart-legend dept-legend"><span><i className="legend-dot" style={{ background: '#3f8a66' }} /> 90%+</span><span><i className="legend-dot" style={{ background: '#d9a441' }} /> 75–89%</span><span><i className="legend-dot" style={{ background: '#c2553f' }} /> Below 75%</span></div>
                 </div>
-                <div className="department-chart">
+                <div className="department-chart" style={{ height: Math.max(120, departmentsToday.length * 30 + 10) }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={departmentsToday.slice(0, 6)} layout="vertical" margin={{ top: 2, right: 40, bottom: 0, left: 0 }}>
+                    <BarChart data={departmentsToday.map((item) => ({ ...item, label: `${item.rate}%  ·  ${item.present}/${item.total}` }))} layout="vertical" margin={{ top: 2, right: 96, bottom: 0, left: 0 }}>
                       <CartesianGrid stroke="#edf1ee" horizontal={false} />
                       <XAxis type="number" domain={[0, 100]} hide />
-                      <YAxis type="category" dataKey="department" width={124} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} />
+                      <YAxis type="category" dataKey="department" width={124} interval={0} axisLine={false} tickLine={false} tick={{ fill: '#3c4a42', fontSize: 12.5 }} />
                       <Tooltip content={<ChartTooltip suffix="%" />} />
-                      <Bar dataKey="rate" name="Attendance" fill="#3f8a66" radius={[0, 4, 4, 0]} barSize={16}>
-                        <LabelList dataKey="rate" position="right" formatter={(value: number) => `${value}%`} style={{ fill: '#414d45', fontSize: 12, fontWeight: 600 }} />
+                      <Bar dataKey="rate" name="Attendance" radius={[0, 6, 6, 0]} barSize={16} background={{ fill: '#f1f5f2', radius: 6 }} isAnimationActive={false}>
+                        {departmentsToday.map((item) => <Cell key={item.department} fill={item.rate >= 90 ? '#3f8a66' : item.rate >= 75 ? '#d9a441' : '#c2553f'} />)}
+                        <LabelList dataKey="label" position="right" style={{ fill: '#3c4a42', fontSize: 12, fontWeight: 600 }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="chart-footnote">{departmentsToday.length} departments <span className="footnote-divider" /> Based on {formatDate(selectedDate)}</div>
+                <div className="chart-footnote">All {departmentsToday.length} departments <span className="footnote-divider" /> Based on {formatDate(selectedDate)}</div>
               </div>}
               <div className="panel mini-chart-panel">
                 <div className="panel-heading">

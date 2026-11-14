@@ -143,6 +143,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .kpi-foot { margin-top: 8px; font-size: 13px; }
 .kpi-card-link:hover { border-color: transparent; box-shadow: var(--shadow-lg); transform: translateY(-2px); }
 .chart-grid { gap: 16px; }
+/* Department chart lists every department, so give it the full row */
+.chart-grid .trend-panel, .chart-grid .dept-panel { grid-column: 1 / -1; }
+.dept-legend { min-height: 0; font-size: 12px; }
+.department-chart { margin-top: 16px; }
 .green-dot { background: #2f6b4f; }
 .mint-dot { background: #a9cdb8; }
 .amber-dot { background: #d9a441; }
