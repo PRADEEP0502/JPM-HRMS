@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from pymongo import MongoClient, ASCENDING
-import os, re
+import os, re, uuid
 from datetime import datetime
 from collections import defaultdict
 import xlrd
@@ -194,6 +194,98 @@ def upload():
         "departments":   list({r['dept'] for r in new_records}),
         "total_records": records_col.count_documents({}),
     })
+
+# ── IMPORT PREVIEW / COMMIT (used by the React frontend) ─────────────────
+def _pending_col():
+    get_db()
+    return _db['pending_imports']
+
+def _preview_payload(doc, status):
+    rows = []
+    for i, r in enumerate(doc['records'], start=1):
+        worked = int(round(r.get('hrs_decimal', 0) * 60))
+        rows.append({
+            "sourceRow": i,
+            "employeeId": r.get('ticket', ''),
+            "employeeName": r.get('name', ''),
+            "date": r.get('date'),
+            "punches": [],
+            "firstIn": None,
+            "lastOut": None,
+            "workedMinutes": worked,
+            "lateMinutes": r.get('late_min', 0),
+            "earlyMinutes": r.get('early_min', 0),
+            "status": "PRESENT" if worked > 0 else "ABSENT",
+            "validationStatus": "VALID",
+            "messages": [],
+            "originalData": {"dept": r.get('dept', ''), "worked_hrs": r.get('worked_hrs', '')},
+        })
+    return {
+        "importId": doc['_id'],
+        "filename": doc['filename'],
+        "fileType": "EXCEL",
+        "status": status,
+        "totalRows": len(rows),
+        "validRows": len(rows),
+        "rejectedRows": 0,
+        "duplicateRows": 0,
+        "reportDates": [doc['date_iso']],
+        "rows": rows,
+        "messages": [],
+    }
+
+@app.route('/import/excel', methods=['POST'])
+@app.route('/api/import/excel', methods=['POST'])
+def import_excel_preview():
+    f = request.files.get('file')
+    if f is None or not f.filename:
+        return jsonify({"message": "Send the Excel file as multipart field 'file'."}), 400
+    try:
+        date_iso, date_str, records = parse_excel(f.read())
+    except Exception as e:
+        return jsonify({"message": f"Could not read the Excel report: {e}"}), 422
+    try:
+        doc = {
+            '_id': uuid.uuid4().hex,
+            'filename': f.filename,
+            'date_iso': date_iso,
+            'date_label': date_str,
+            'records': records,
+            'created_at': datetime.utcnow(),
+        }
+        _pending_col().insert_one(doc)
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify(_preview_payload(doc, "PREVIEW"))
+
+@app.route('/import/pdf', methods=['POST'])
+@app.route('/api/import/pdf', methods=['POST'])
+def import_pdf_preview():
+    return jsonify({"message": "PDF import is not supported on this server. Upload the Excel (.xls) report."}), 415
+
+@app.route('/import/<import_id>/commit', methods=['POST'])
+@app.route('/api/import/<import_id>/commit', methods=['POST'])
+def import_commit(import_id):
+    try:
+        pending = _pending_col()
+        doc = pending.find_one({'_id': import_id})
+        if doc is None:
+            return jsonify({"message": "Import preview not found or already committed. Upload the file again."}), 404
+        records_col, metadata_col = get_db()
+        records_col.delete_many({'date': doc['date_iso']})
+        if doc['records']:
+            records_col.insert_many([{k: v for k, v in r.items() if k != '_id'} for r in doc['records']])
+        metadata_col.update_one(
+            {'date': doc['date_iso']},
+            {'$set': {'date': doc['date_iso'], 'date_label': doc['date_label'],
+                      'record_count': len(doc['records']),
+                      'uploaded_at': datetime.utcnow()}},
+            upsert=True
+        )
+        pending.delete_one({'_id': import_id})
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify(_preview_payload(doc, "COMMITTED"))
 
 @app.route('/records')
 @app.route('/api/records')
