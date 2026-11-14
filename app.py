@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
-from pymongo import MongoClient, ASCENDING
-import os, re, uuid
+from pymongo import MongoClient, ASCENDING, UpdateOne
+import os, re, uuid, json
 from datetime import datetime
 from collections import defaultdict
 import xlrd
@@ -29,7 +29,58 @@ def get_db():
         _records.create_index([('dept',   ASCENDING)])
         _records.create_index([('ticket', ASCENDING)])
         _records.create_index([('date',   ASCENDING), ('dept', ASCENDING)])
+        _seed_employee_master()
     return _records, _metadata
+
+# ── EMPLOYEE MASTER (used to work out who is absent) ─────────────────────
+MASTER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'employee_master.json')
+
+def _seed_employee_master():
+    """Add any employee from employee_master.json that is not in Mongo yet.
+    Existing employees (incl. ones edited/added from the app) are never overwritten."""
+    col = _db['employee_master']
+    col.create_index([('ticket', ASCENDING)], unique=True)
+    if not os.path.exists(MASTER_FILE):
+        return
+    with open(MASTER_FILE, encoding='utf-8') as fh:
+        rows = json.load(fh)
+    ops = [UpdateOne({'ticket': str(r['ticket']).strip()},
+                     {'$setOnInsert': {'ticket': str(r['ticket']).strip(), 'name': r['name'].strip(),
+                                       'dept': r['dept'].strip(), 'active': True}},
+                     upsert=True) for r in rows]
+    if ops:
+        col.bulk_write(ops, ordered=False)
+
+def get_master():
+    """Active employees from the master list, keyed by ticket number."""
+    get_db()
+    return {e['ticket']: e for e in _db['employee_master'].find({'active': {'$ne': False}}, {'_id': 0})}
+
+def report_dates():
+    """Dates for which an attendance report has been imported."""
+    _, metadata_col = get_db()
+    return set(metadata_col.distinct('date'))
+
+def absent_records(dates, dept=None, search=None):
+    """Synthetic ABSENT rows: master employees with no punch record on an imported date."""
+    records_col, _ = get_db()
+    master = get_master()
+    if dept:
+        master = {t: e for t, e in master.items() if e['dept'] == dept}
+    if search:
+        s = search.lower()
+        master = {t: e for t, e in master.items() if s in e['name'].lower() or s in t.lower()}
+    if not master:
+        return []
+    rows = []
+    for d in sorted(dates):
+        present = set(records_col.distinct('ticket', {'date': d}))
+        for t, e in master.items():
+            if t not in present:
+                rows.append({'date': d, 'ticket': t, 'name': e['name'], 'dept': e['dept'],
+                             'status': 'ABSENT', 'late_min': 0, 'early_min': 0,
+                             'hrs_decimal': 0, 'worked_hrs': ''})
+    return rows
 
 # ── CONSTANTS ─────────────────────────────────────────────────────────────
 SKIP_FOOTERS = {f'page {i} of 5' for i in range(1, 6)}
@@ -299,12 +350,17 @@ def get_records():
 
     query    = {}
     date_f   = request.args.get('date', '')
+    from_f   = request.args.get('from', '')
+    to_f     = request.args.get('to', '')
     dept_f   = request.args.get('dept', '')
     status_f = request.args.get('status', '')
     search_f = request.args.get('search', '')
-    limit    = int(request.args.get('limit', 500))
+    limit    = int(request.args.get('limit', 50000))
 
-    if date_f:   query['date'] = date_f
+    if date_f:
+        query['date'] = date_f
+    elif from_f or to_f:
+        query['date'] = {**({'$gte': from_f} if from_f else {}), **({'$lte': to_f} if to_f else {})}
     if dept_f:   query['dept'] = dept_f
     if search_f:
         query['$or'] = [
@@ -315,10 +371,20 @@ def get_records():
     if status_f == 'early': query['early_min'] = {'$gt': 0}
     if status_f == 'ok':    query.update({'late_min': 0, 'early_min': 0})
 
-    total = records_col.count_documents(query)
     recs  = list(records_col.find(query, {'_id': 0, 'created_at': 0})
                              .sort('date', ASCENDING).limit(limit))
-    return jsonify({"count": total, "records": recs})
+
+    # Add ABSENT rows for master employees missing from each imported report date
+    if status_f in ('', 'absent'):
+        dates = report_dates()
+        if date_f:
+            dates = {d for d in dates if d == date_f}
+        else:
+            dates = {d for d in dates if (not from_f or d >= from_f) and (not to_f or d <= to_f)}
+        absents = absent_records(dates, dept=dept_f or None, search=search_f or None)
+        recs = absents if status_f == 'absent' else recs + absents
+        recs.sort(key=lambda r: r['date'])
+    return jsonify({"count": len(recs), "records": recs})
 
 @app.route('/summary')
 @app.route('/api/summary')
@@ -382,13 +448,24 @@ def get_summary():
     total_recs = sum(d['total'] for d in by_date.values())
     late_recs  = sum(d['late']  for d in by_date.values())
     early_recs = sum(d['early'] for d in by_date.values())
-    unique_emps = len(records_col.distinct('ticket', match)) if total_recs > 0 else 0
+    present_tickets = set(records_col.distinct('ticket', match)) if total_recs > 0 else set()
+    unique_emps = len(present_tickets)
+
+    # Absent = employees in the master list with no record on this (imported) date
+    master = get_master()
+    if match.get('dept'):
+        master = {t: e for t, e in master.items() if e['dept'] == match['dept']}
+    date_q = match.get('date')
+    absent = None
+    if master and date_q and date_q in report_dates():
+        absent = len(set(master) - present_tickets)
+    total_emps = len(set(master) | present_tickets) if master else unique_emps
 
     return jsonify({
         "date":                    request.args.get('date', datetime.today().strftime('%Y-%m-%d')),
-        "totalEmployees":          unique_emps,
+        "totalEmployees":          total_emps,
         "presentEmployees":        unique_emps,
-        "absentEmployees":         0,
+        "absentEmployees":         absent,
         "lateComing":              late_recs,
         "earlyGoing":              early_recs,
         "onDuty":                  0,
@@ -496,7 +573,35 @@ def get_employees():
             'total_early_min': e['total_early_min'],
             'status':          status,
         })
+
+    # Include master employees who have no attendance records yet
+    seen = {r['ticket'] for r in result}
+    for t, m in get_master().items():
+        if t in seen or (match.get('dept') and m['dept'] != match['dept']):
+            continue
+        result.append({'ticket': t, 'name': m['name'], 'dept': m['dept'], 'days': 0,
+                       'late_days': 0, 'early_days': 0, 'late_pct': 0, 'avg_hrs': 0,
+                       'total_late_min': 0, 'total_early_min': 0, 'status': 'No records'})
     return jsonify({"count": len(result), "employees": result})
+
+@app.route('/employees', methods=['POST'])
+@app.route('/api/employees', methods=['POST'])
+def add_employee():
+    """Add (or update) one employee in the master list."""
+    body = request.get_json(silent=True) or {}
+    ticket = str(body.get('employeeId') or body.get('ticket') or '').strip()
+    name   = str(body.get('employeeName') or body.get('name') or '').strip()
+    dept   = str(body.get('department') or body.get('dept') or '').strip() or 'Unassigned'
+    if not ticket or not name:
+        return jsonify({"message": "Employee ID and name are required."}), 400
+    try:
+        get_db()
+        _db['employee_master'].update_one({'ticket': ticket},
+            {'$set': {'ticket': ticket, 'name': name, 'dept': dept, 'active': True}}, upsert=True)
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify({"employeeId": ticket, "employeeName": name, "department": dept,
+                    "designation": None, "shift": None, "joiningDate": None, "employmentStatus": "ACTIVE"})
 
 @app.route('/reset', methods=['DELETE'])
 @app.route('/api/reset', methods=['DELETE'])
