@@ -378,9 +378,10 @@ def get_summary():
             'avg_hrs': round(d.get('avg_hrs') or 0, 2),
         }
 
-    total_recs = records_col.count_documents(match)
-    late_recs  = records_col.count_documents({**match, 'late_min': {'$gt': 0}})
-    early_recs = records_col.count_documents({**match, 'early_min': {'$gt': 0}})
+    # Totals come from the per-date aggregation above (same match) — saves 3 DB round trips
+    total_recs = sum(d['total'] for d in by_date.values())
+    late_recs  = sum(d['late']  for d in by_date.values())
+    early_recs = sum(d['early'] for d in by_date.values())
     unique_emps = len(records_col.distinct('ticket', match)) if total_recs > 0 else 0
 
     return jsonify({
