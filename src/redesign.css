@@ -171,8 +171,28 @@ tbody tr:hover td { background: var(--surface-soft); }
 .kpi-table thead th { background: var(--surface); }
 
 /* ---- Insights, workspace, settings ---- */
-.insight-item { padding: 16px; border: 0; border-radius: 18px; background: var(--surface-soft); }
-.insight-item-title { font: 600 16px var(--heading); }
+.insight-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+/* Medium screens: 3 on top, 2 below — no lonely card on its own row */
+@media (max-width: 1360px) {
+  .insight-list { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .insight-item { grid-column: span 2; }
+  .insight-item:nth-child(n+4) { grid-column: span 3; }
+}
+@media (max-width: 700px) {
+  .insight-list { grid-template-columns: minmax(0, 1fr); }
+  .insight-item, .insight-item:nth-child(n+4) { grid-column: auto; }
+}
+.insight-item { min-width: 0; display: flex; flex-direction: column; padding: 18px; border: 1px solid transparent; border-radius: 18px; background: var(--surface-soft); transition: border-color .15s, background .15s; }
+.insight-item:hover { border-color: var(--line); background: var(--surface); }
+.insight-head { display: flex; align-items: center; gap: 10px; }
+.insight-icon { flex: 0 0 30px; width: 30px; height: 30px; margin: 0; border-radius: 10px; }
+.insight-icon.muted { background: var(--line); color: var(--muted); }
+.insight-item-title { min-width: 0; overflow: hidden; color: var(--muted); font: 600 13px/1.3 "DM Sans", sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.insight-value { margin-top: 16px; overflow: hidden; color: var(--ink); font: 600 26px/1.15 var(--heading); letter-spacing: -.4px; text-overflow: ellipsis; white-space: nowrap; }
+.insight-body { margin: 6px 0 0; color: var(--body); font-size: 13.5px; line-height: 1.45; }
+.insight-empty .insight-value { color: #9aa79f; font-size: 20px; }
+.insight-empty .insight-body { color: var(--muted); }
+.insight-footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .sparkle-icon, .settings-card-icon, .modal-icon { border-radius: 12px; }
 .workspace-panel { margin-bottom: 18px; }
 .workspace-panel-heading { padding: 20px 22px; }

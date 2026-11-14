@@ -578,32 +578,48 @@ function App() {
     item.name === getEmployee(scopeEmployeeId ?? '')?.name.split(' ')[0],
   );
   const topDepartment = departmentsToday.filter((item) => item.present > 0).sort((a, b) => b.rate - a.rate)[0];
-  const lateInsight = role === 'Employee'
-    ? !personalRecords.length
-      ? 'No personal attendance data is available for the last 30 days.'
-      : `Your attendance record shows ${personalLateCount} late arrival${personalLateCount === 1 ? '' : 's'} in the last 30 days.`
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+  type Insight = { icon: typeof Users; color: string; title: string; value: string; body: string; empty?: boolean };
+  const noData = (title: string, icon: typeof Users, color: string, body: string): Insight => ({ icon, color, title, value: 'No data yet', body, empty: true });
+
+  const lateCard: Insight = role === 'Employee'
+    ? personalRecords.length
+      ? { icon: Clock3, color: 'amber', title: 'Your late arrivals', value: plural(personalLateCount, 'day'), body: 'Late in the last 30 days.' }
+      : noData('Your late arrivals', Clock3, 'amber', 'No records for you in the last 30 days.')
     : !recentAttendanceRecords.length
-      ? 'No attendance data is available for the last 30 days.'
+      ? noData('Late arrivals', Clock3, 'amber', 'No records in the last 30 days.')
       : role === 'MD'
-        ? `${lateFrequency.filter((item) => item.count >= 3).length} employees have recurring late arrivals in the last 30 days.`
+        ? { icon: Clock3, color: 'amber', title: 'Late arrivals', value: plural(lateFrequency.filter((item) => item.count >= 3).length, 'employee'), body: 'Late 3 or more times in the last 30 days.' }
         : repeatedLate.length
-          ? `${repeatedLate[0].employee.name} recorded the most late arrivals in the last 30 days (${repeatedLate[0].count} days).`
-          : 'No late arrivals were found in the available records.';
-  const departmentInsight = role === 'Employee'
+          ? { icon: Clock3, color: 'amber', title: 'Most often late', value: repeatedLate[0].employee.name, body: `Late on ${plural(repeatedLate[0].count, 'day')} in the last 30 days.` }
+          : { icon: Clock3, color: 'amber', title: 'Late arrivals', value: 'None', body: 'Nobody was late in the last 30 days.' };
+
+  const departmentCard: Insight = role === 'Employee'
     ? personalPerformance
-      ? `Your attendance rate over the last 30 days is ${personalPerformance.rate}%.`
-      : 'No personal attendance data is available for the last 30 days.'
+      ? { icon: ChartNoAxesCombined, color: 'green', title: 'Your attendance', value: `${personalPerformance.rate}%`, body: 'Attendance rate over the last 30 days.' }
+      : noData('Your attendance', ChartNoAxesCombined, 'green', 'No records for you in the last 30 days.')
     : !hasSelectedRecords
-      ? 'No department attendance movements are available for this date.'
+      ? noData('Top department', ChartNoAxesCombined, 'green', `No records for ${formatDate(selectedDate)}.`)
       : topDepartment
-        ? `${topDepartment.department} has the highest recorded attendance share today at ${topDepartment.rate}%.`
-        : 'No employees were recorded as present in the available department data.';
-  const insights = [
-    { icon: Clock3, color: 'amber', title: role === 'Employee' ? 'Your late arrivals' : 'Frequent late arrivals', body: lateInsight },
-    { icon: ChartNoAxesCombined, color: 'green', title: role === 'Employee' ? 'Your 30-day attendance' : 'Department attendance', body: departmentInsight },
-    { icon: Activity, color: 'blue', title: role === 'Employee' ? 'Your attendance improvement' : 'Attendance improvement', body: weeklyChange === null ? 'Not enough consecutive attendance data is available to compare weekly performance.' : `${weeklyChange >= 0 ? 'Up' : 'Down'} ${Math.abs(weeklyChange)} percentage points against the previous 7 days.` },
-    { icon: Fingerprint, color: 'rose', title: 'Punch completeness', body: missingPunches === null ? 'Punch completeness is unavailable until an attendance report is imported.' : missingPunches ? `${missingPunches} employee record${missingPunches === 1 ? '' : 's'} may be missing a punch today.` : 'No missing punches were found in the available records.' },
-    { icon: ChartNoAxesCombined, color: 'green', title: 'Monthly attendance performance', body: latestMonth?.records ? `${latestMonth.date} attendance is ${latestMonth.attendance}% across ${latestMonth.records} available records.` : 'Monthly performance is unavailable until attendance records are connected.' },
+        ? { icon: ChartNoAxesCombined, color: 'green', title: 'Top department', value: `${topDepartment.rate}%`, body: `${topDepartment.department} has the best attendance today.` }
+        : { icon: ChartNoAxesCombined, color: 'green', title: 'Top department', value: '0%', body: 'No one is marked present today.' };
+
+  const insights: Insight[] = [
+    lateCard,
+    departmentCard,
+    weeklyChange === null
+      ? noData('Weekly change', Activity, 'blue', 'Needs 14 days of data to compare weeks.')
+      : weeklyChange === 0
+        ? { icon: Activity, color: 'blue', title: 'Weekly change', value: 'Steady', body: 'Same attendance as the previous 7 days.' }
+        : { icon: Activity, color: weeklyChange > 0 ? 'green' : 'rose', title: 'Weekly change', value: `${weeklyChange > 0 ? '+' : '−'}${Math.abs(weeklyChange)}%`, body: `Attendance ${weeklyChange > 0 ? 'up' : 'down'} compared with the previous 7 days.` },
+    missingPunches === null
+      ? noData('Missing punches', Fingerprint, 'rose', 'Import a report to check punches.')
+      : missingPunches
+        ? { icon: Fingerprint, color: 'rose', title: 'Missing punches', value: plural(missingPunches, 'record'), body: 'May be missing an in or out punch today.' }
+        : { icon: Fingerprint, color: 'green', title: 'Missing punches', value: 'All complete', body: 'Every record has its punches today.' },
+    latestMonth?.records
+      ? { icon: CalendarDays, color: 'green', title: `${latestMonth.date} attendance`, value: `${latestMonth.attendance}%`, body: `Based on ${plural(latestMonth.records, 'record')} this month.` }
+      : noData('This month', CalendarDays, 'green', 'No records for this month yet.'),
   ];
   const accessibleNavItems = role === 'Employee'
     ? navItems.filter((item) => ['Dashboard', 'Attendance'].includes(item.label))
@@ -860,9 +876,10 @@ function App() {
                 <div className="insights-title"><div className="sparkle-icon"><Sparkles size={16} /></div><div><h3>Workforce insights</h3><p>Patterns in your attendance data</p></div></div>
               </div>
               <div className="insight-list">
-                {insights.map(({ icon: Icon, color, title, body }) => <div className="insight-item" key={title}>
-                  <div className={`insight-icon ${color}`}><Icon size={15} /></div>
-                  <div className="insight-copy"><div className="insight-item-title">{title}</div><p>{body}</p></div>
+                {insights.map(({ icon: Icon, color, title, value, body, empty }) => <div className={`insight-item ${empty ? 'insight-empty' : ''}`} key={title}>
+                  <div className="insight-head"><div className={`insight-icon ${empty ? 'muted' : color}`}><Icon size={15} /></div><span className="insight-item-title">{title}</span></div>
+                  <div className="insight-value" title={value}>{value}</div>
+                  <p className="insight-body">{body}</p>
                 </div>)}
               </div>
               <div className="insight-footer"><span><span className="insight-status-dot" /> Derived from {attendanceRecords.length} {usingDemoData ? 'demo' : 'available'} records</span><button onClick={() => showNotice('Insights are generated from the currently available attendance data.')}>How it works <ArrowRight size={12} /></button></div>
