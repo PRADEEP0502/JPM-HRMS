@@ -27,6 +27,13 @@ const todayAttendanceRecords = getRecordsForDate(todayKey);
 const attendanceExceptionCount = todayAttendanceRecords.filter((record) =>
   record.status === 'Late' || record.status === 'Missing punch' || record.status === 'No punching' || record.status === 'Absent' || record.earlyMinutes > 0,
 ).length;
+// Shorter names shown in the sidebar so every item fits on one line
+const navShortLabel: Record<string, string> = {
+  'Leave management': 'Leave',
+  'Shift & schedule': 'Shifts',
+  'Alerts & notifications': 'Alerts',
+};
+
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Attendance', icon: Fingerprint, badge: String(todayAttendanceRecords.filter((record) => record.status !== 'Present').length) },
@@ -625,7 +632,7 @@ function App() {
                 ? String(visibleRecords.filter((record) => record.status !== 'Present' || record.earlyMinutes > 0).length)
                 : badge;
             return <button key={label} onClick={() => { setActiveNav(label); setMobileMenu(false); }} className={`nav-item ${activeNav === label ? 'nav-active' : ''}`}>
-              <Icon size={18} strokeWidth={1.8} /><span>{label}</span>{dynamicBadge !== undefined && <span className="nav-badge">{dynamicBadge}</span>}
+              <Icon size={18} strokeWidth={1.8} /><span>{navShortLabel[label] ?? label}</span>{dynamicBadge !== undefined && dynamicBadge !== '0' && <span className="nav-badge">{dynamicBadge}</span>}
             </button>;
           })}
         </nav>
