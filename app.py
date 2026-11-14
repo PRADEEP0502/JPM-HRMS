@@ -36,10 +36,10 @@ def get_db():
 MASTER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'employee_master.json')
 
 def _seed_employee_master():
-    """Add any employee from employee_master.json that is not in Mongo yet.
-    Existing employees (incl. ones edited/added from the app) are never overwritten,
-    except that an entry marked "active": false in the file is always deactivated
-    (that is how someone who left is removed from the absent check)."""
+    """Sync employee_master.json into Mongo on startup.
+    For every employee listed in the file, the file's name, department and active flag win
+    (so a department change or "active": false in the file reaches the live DB).
+    Employees added from the app that are not in the file are left untouched."""
     col = _db['employee_master']
     col.create_index([('ticket', ASCENDING)], unique=True)
     if not os.path.exists(MASTER_FILE):
@@ -49,11 +49,10 @@ def _seed_employee_master():
     ops = []
     for r in rows:
         ticket = str(r['ticket']).strip()
-        base = {'ticket': ticket, 'name': r['name'].strip(), 'dept': r['dept'].strip()}
-        if r.get('active') is False:
-            ops.append(UpdateOne({'ticket': ticket}, {'$set': {'active': False}, '$setOnInsert': base}, upsert=True))
-        else:
-            ops.append(UpdateOne({'ticket': ticket}, {'$setOnInsert': {**base, 'active': True}}, upsert=True))
+        ops.append(UpdateOne({'ticket': ticket},
+                             {'$set': {'ticket': ticket, 'name': r['name'].strip(), 'dept': r['dept'].strip(),
+                                       'active': r.get('active', True) is not False}},
+                             upsert=True))
     if ops:
         col.bulk_write(ops, ordered=False)
 
@@ -328,9 +327,14 @@ def upload():
 def save_report_records(records):
     """Replace stored records for every date in this report and mark those dates as imported."""
     records_col, metadata_col = get_db()
+    master = get_master()
     by_date = defaultdict(list)
     for r in records:
-        by_date[r['date']].append({k: v for k, v in r.items() if k != '_id'})
+        row = {k: v for k, v in r.items() if k != '_id'}
+        if row['ticket'] in master:              # master department wins
+            row['report_dept'] = row['dept']
+            row['dept'] = master[row['ticket']]['dept']
+        by_date[r['date']].append(row)
     for d, rows in by_date.items():
         records_col.delete_many({'date': d})
         records_col.insert_many(rows)
@@ -472,6 +476,12 @@ def get_records():
         absents = absent_records(dates, dept=dept_f or None, search=search_f or None)
         recs = absents if status_f == 'absent' else recs + absents
         recs.sort(key=lambda r: r['date'])
+
+    # Show the master department, not the one printed in the report
+    master = get_master()
+    for r in recs:
+        if r.get('ticket') in master:
+            r['dept'] = master[r['ticket']]['dept']
     return jsonify({"count": len(recs), "records": recs})
 
 @app.route('/summary')
@@ -623,6 +633,7 @@ def get_employees():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+    master = get_master()   # master department wins over the report's department
     match = {}
     if request.args.get('dept'): match['dept'] = request.args.get('dept')
 
@@ -651,7 +662,7 @@ def get_employees():
         result.append({
             'ticket':          e['_id'],
             'name':            e['name'],
-            'dept':            e['dept'],
+            'dept':            master.get(e['_id'], {}).get('dept') or e['dept'],
             'days':            e['days'],
             'late_days':       e['late_days'],
             'early_days':      e['early_days'],
@@ -664,7 +675,7 @@ def get_employees():
 
     # Include master employees who have no attendance records yet
     seen = {r['ticket'] for r in result}
-    for t, m in get_master().items():
+    for t, m in master.items():
         if t in seen or (match.get('dept') and m['dept'] != match['dept']):
             continue
         result.append({'ticket': t, 'name': m['name'], 'dept': m['dept'], 'days': 0,
