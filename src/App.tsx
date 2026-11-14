@@ -16,7 +16,7 @@ import {
   replaceAttendanceData, resetAttendanceData, type AttendanceRecord, type AttendanceStatus, type Employee,
 } from './data';
 import {
-  apiRequest, basicAuthorization, type ApiDashboardSummary, type ApiDepartmentAnalytics,
+  apiRequest, basicAuthorization, wakeBackend, type ApiDashboardSummary, type ApiDepartmentAnalytics,
   type ApiAlert, type ApiEmployee, type ApiIdentity, type ApiMovement, type ImportHistoryItem, type ImportPreview,
 } from './api';
 import { zipSync, strToU8 } from 'fflate';
@@ -172,6 +172,9 @@ function App() {
   const [employeeImportResult, setEmployeeImportResult] = useState('');
   const pageSize = 6;
   const departments = getDepartments();
+
+  // Wake the (sleeping) backend as soon as the app opens
+  useEffect(() => { wakeBackend(); }, []);
 
   useEffect(() => {
     if (!authHeader) {
@@ -386,6 +389,7 @@ function App() {
     setImportError('');
     setImportResult('');
     setImportOpen(true);
+    wakeBackend();
     if (!authHeader && !demoMode) setAuthOpen(true);
   };
   const previewReport = async (file?: File) => {
@@ -917,7 +921,7 @@ function App() {
             <span className="upload-link">{stagedFile ? 'Choose a different file' : 'Browse files'}</span>
           </label>
           {demoMode && !authHeader && <p className="form-hint">Browser mode: the Excel file is read on this device and nothing is uploaded or saved.</p>}
-          {importLoading && <p className="form-hint">Uploading and validating report…</p>}
+          {importLoading && <p className="form-hint">Uploading and validating report… If the server was idle it can take up to a minute to wake up — please keep this window open.</p>}
           {importError && <p className="form-error" role="alert">{importError}</p>}
           {importResult && <p className="form-success" role="status">{importResult}</p>}
           {importPreview && <div className="import-preview">

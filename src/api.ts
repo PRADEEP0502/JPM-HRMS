@@ -147,6 +147,17 @@ export async function apiRequest<T>(
   return await response.json() as T;
 }
 
+/**
+ * Fire-and-forget request that wakes the backend (Render free instances sleep
+ * after ~15 min idle and take 30-60 s to start). Called early so the server is
+ * already awake by the time the user uploads a file.
+ */
+export function wakeBackend(): void {
+  const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+  if (!apiBase) return;
+  fetch(`${apiBase}/api/health`, { cache: 'no-store' }).catch(() => undefined);
+}
+
 export function basicAuthorization(username: string, password: string): string {
   const bytes = new TextEncoder().encode(`${username}:${password}`);
   let binary = '';
