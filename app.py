@@ -171,12 +171,13 @@ def short_minutes(record, dept):
 
 def apply_rules(record, dept):
     """Recompute missing-punch status and short hours for a record using the master department."""
+    # Reports sometimes print no "Worked Hrs"; fall back to the complete IN→OUT pairs
+    if not record.get('hrs_decimal') and record.get('punches'):
+        record['hrs_decimal'] = round(paired_minutes(record['punches']) / 60.0, 2)
     if record.get('status') in (None, '', 'INCOMPLETE', 'SHORT_HOURS'):
         record.pop('status', None)
         if punch_status(record.get('punches'), dept):
             record['status'] = 'INCOMPLETE'
-            if not record.get('hrs_decimal'):
-                record['hrs_decimal'] = round(paired_minutes(record['punches']) / 60.0, 2)
     record['short_min'] = short_minutes(record, dept)
     return record
 
