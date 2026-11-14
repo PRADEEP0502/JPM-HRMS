@@ -123,6 +123,49 @@ def _cell_date(v, datemode):
             return None
     return None
 
+DUPLICATE_PUNCH_MINUTES = 30
+
+def _minute_of(p):
+    return int(p['time'][11:13]) * 60 + int(p['time'][14:16])
+
+def clean_punches(punches):
+    """Drop double-taps: the same punch type again within 30 minutes (e.g. 8:32 AM-I, 8:33 AM-I)."""
+    out = []
+    for p in punches or []:
+        if out and out[-1]['type'] == p['type'] and (_minute_of(p) - _minute_of(out[-1])) % 1440 <= DUPLICATE_PUNCH_MINUTES:
+            continue
+        out.append(p)
+    return out
+
+NIGHT_SHIFT_START = 17 * 60   # first IN at/after 5 PM = night shift
+
+def punch_status(punches):
+    """'INCOMPLETE' (missing punch) unless the day's punches are a clean IN→OUT sequence:
+      * day shift:   IN, OUT, IN, OUT (lunch out/in) — 6 punches for a double shift is also fine
+      * night shift: first IN at/after 5 PM — IN, OUT is enough (no lunch punches)
+    Double-taps are ignored first (see clean_punches)."""
+    punches = clean_punches(punches)
+    if not punches:
+        return None
+    types = [p['type'] for p in punches]
+    alternating = (types[0] == 'IN' and types[-1] == 'OUT'
+                   and all(types[i] != types[i + 1] for i in range(len(types) - 1)))
+    night_shift = types[0] == 'IN' and _minute_of(punches[0]) >= NIGHT_SHIFT_START
+    needed = 2 if night_shift else 4
+    return None if alternating and len(types) >= needed else 'INCOMPLETE'
+
+def paired_minutes(punches):
+    """Minutes worked across complete IN→OUT pairs (handles night shifts crossing midnight)."""
+    total, pending = 0, None
+    for p in clean_punches(punches):
+        t = _minute_of(p)
+        if p['type'] == 'IN':
+            pending = t
+        elif pending is not None:
+            total += (t - pending) % 1440
+            pending = None
+    return total
+
 def parse_excel(file_bytes):
     """Return (first_date_iso, first_date_label, records). Raises ValueError with a clear message."""
     try:
@@ -203,6 +246,9 @@ def parse_excel(file_bytes):
             if p:
                 punches.append({'sequence': len(punches) + 1, 'time': f'{date_iso}T{p[0]}:00',
                                 'type': p[1], 'rawValue': p[2]})
+        # Report shows 0 hours when a punch is missing; use the complete pairs instead
+        if not hrs_decimal and punches:
+            hrs_decimal = paired_minutes(punches) / 60.0
         first_in = next((p['time'][11:16] for p in punches if p['type'] == 'IN'), '')
         last_out = next((p['time'][11:16] for p in reversed(punches) if p['type'] == 'OUT'), '')
         day_name = next((str(v).strip() for v in row if str(v).strip() in DAY_NAMES), '')
@@ -222,6 +268,7 @@ def parse_excel(file_bytes):
             'in':             first_in,
             'out':            last_out,
             'punches':        punches,
+            **({'status': 'INCOMPLETE'} if punch_status(punches) else {}),
             'created_at':     datetime.utcnow(),
         })
 
@@ -477,11 +524,16 @@ def get_records():
         recs = absents if status_f == 'absent' else recs + absents
         recs.sort(key=lambda r: r['date'])
 
-    # Show the master department, not the one printed in the report
+    # Show the master department, not the one printed in the report.
+    # Also flag missing punches on records imported before the status field existed.
     master = get_master()
     for r in recs:
         if r.get('ticket') in master:
             r['dept'] = master[r['ticket']]['dept']
+        if not r.get('status') and punch_status(r.get('punches')):
+            r['status'] = 'INCOMPLETE'
+            if not r.get('hrs_decimal'):
+                r['hrs_decimal'] = round(paired_minutes(r['punches']) / 60.0, 2)
     return jsonify({"count": len(recs), "records": recs})
 
 @app.route('/summary')
@@ -567,7 +619,8 @@ def get_summary():
         "lateComing":              late_recs,
         "earlyGoing":              early_recs,
         "onDuty":                  0,
-        "missingPunches":          0,
+        "missingPunches":          sum(1 for r in records_col.find(match, {'punches': 1, '_id': 0})
+                                       if punch_status(r.get('punches'))),
         "averageWorkingHours":     8.0,
         "employeeMasterAvailable": True,
         "importedReportAvailable": total_recs > 0,
