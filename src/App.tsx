@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, Clock3, Download, FileUp, Filter, LayoutDashboard, LogOut,
   Menu, MoreHorizontal, Search, Settings, ShieldCheck, Sparkles, Users, X,
   BriefcaseBusiness, ChartNoAxesCombined, FileBarChart, Fingerprint,
-  CalendarClock, CircleAlert, CircleCheck, UserPlus, KeyRound, Timer, FileSpreadsheet, SlidersHorizontal,
+  CalendarClock, CircleAlert, CircleCheck, UserPlus, KeyRound, Timer, FileSpreadsheet, SlidersHorizontal, Leaf,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ReferenceLine,
@@ -106,7 +106,7 @@ async function downloadPdf(records: AttendanceRecord[], title: string) {
   const autoTable = tableModule.default;
   const document = new jsPDF({ orientation: 'landscape' });
   document.setFontSize(15);
-  document.text('JPM · Attendance Movement', 14, 16);
+  document.text('JPM HRMS · Attendance Movement', 14, 16);
   document.setFontSize(9);
   document.text(title, 14, 23);
   autoTable(document, {
@@ -608,15 +608,15 @@ function App() {
       {mobileMenu && <button className="mobile-backdrop" onClick={() => setMobileMenu(false)} aria-label="Close navigation" />}
       <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
         <div className="brand-lockup">
-          <div className="brand-mark"><span>J</span><i /></div>
-          <div><div className="brand-name">JPM<span>.</span></div><div className="brand-caption">WORKFORCE</div></div>
+          <div className="brand-mark"><Leaf size={16} strokeWidth={2.2} /></div>
+          <div><div className="brand-name">JPM HRMS</div><div className="brand-caption">People &amp; attendance</div></div>
           <button className="sidebar-close" onClick={() => setMobileMenu(false)} aria-label="Close navigation"><X size={18} /></button>
         </div>
         <div className="workspace-switcher">
           <div className="workspace-icon">JM</div>
           <div className="workspace-copy"><strong>Junior Processing</strong><span>Company workspace</span></div>
         </div>
-        <div className="sidebar-label">WORKSPACE</div>
+        <div className="sidebar-label">Menu</div>
         <nav className="nav-list" aria-label="Main navigation">
           {allowedNavItems.map(({ label, icon: Icon, badge }) => {
             const dynamicBadge = label === 'Attendance'
@@ -659,32 +659,46 @@ function App() {
         </header>
 
         <div className="content-wrap">
-          {!demoMode && !authIdentity ? <div className="workspace-empty access-required">          <div className="workspace-empty-icon"><KeyRound size={20} /></div><strong>Sign in to access JPM attendance</strong><p>Production attendance data is only available to authenticated, role-authorized accounts.</p><button className="button-primary" onClick={() => setAuthOpen(true)}>Sign in securely</button><button className="button-secondary" onClick={() => { setActiveNav('Settings'); setAuthOpen(false); }}>View configuration guidance</button></div>
+          {!demoMode && !authIdentity ? <div className="workspace-empty access-required">          <div className="workspace-empty-icon"><KeyRound size={20} /></div><strong>Sign in to access JPM HRMS</strong><p>Production attendance data is only available to authenticated, role-authorized accounts.</p><button className="button-primary" onClick={() => setAuthOpen(true)}>Sign in securely</button><button className="button-secondary" onClick={() => { setActiveNav('Settings'); setAuthOpen(false); }}>View configuration guidance</button></div>
           : activeNav === 'Dashboard' ? <>
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
-              <h1>Attendance overview</h1>
-              <p className="page-subtitle">A clear view of your people, presence and performance.</p>
+          <section className="hero" aria-label="Attendance overview">
+            <div className="hero-copy">
+              <div className="hero-chip">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+              <h1>Your team’s attendance, at a glance</h1>
+              <p>Who came in, who is late and who needs attention — everything for {formatDate(selectedDate)} in one place.</p>
             </div>
-            <div className="heading-actions">
-              <div className={`data-mode ${usingDemoData || localImport || authHeader && !apiError ? '' : 'disconnected'}`}><span className="live-dot" />{usingDemoData ? 'Demo data' : localImport ? 'Imported file' : authHeader && !apiError ? 'Connected' : 'Not connected'}</div>
-              {role === 'HR' && <button className="button-secondary" onClick={beginImport}><FileUp size={16} /> Import report</button>}
-              <button className="button-primary" onClick={downloadCsv}><Download size={16} /> {role === 'Employee' ? 'Export my report' : 'Export report'}</button>
+            <ul className="hero-stats">
+              <li><span>Present</span><strong>{present ?? '—'}</strong></li>
+              <li><span>Absent</span><strong>{absent ?? '—'}</strong></li>
+              <li><span>Late arrivals</span><strong>{late ?? '—'}</strong></li>
+              <li><span>Early departures</span><strong>{early ?? '—'}</strong></li>
+              <li><span>Missing punches</span><strong>{missingPunchCount ?? '—'}</strong></li>
+            </ul>
+            <div className="hero-bar">
+              <div className="hero-field">
+                <span>Date</span>
+                <div className="date-nav">
+                  <button aria-label="Previous day" onClick={() => moveDate(-1)}><ChevronLeft size={16} /></button>
+                  <input type="date" value={selectedDate} onChange={(event) => setDate(event.target.value)} aria-label="Select attendance date" />
+                  <button aria-label="Next day" onClick={() => moveDate(1)}><ChevronRight size={16} /></button>
+                </div>
+              </div>
+              <div className="hero-field">
+                <span>Data source</span>
+                <div className={`data-mode ${usingDemoData || localImport || authHeader && !apiError ? '' : 'disconnected'}`}><span className="live-dot" />{usingDemoData ? 'Demo data' : localImport ? 'Imported file' : authHeader && !apiError ? 'Connected' : 'Not connected'}</div>
+              </div>
+              <div className="hero-bar-actions">
+                {role === 'HR' && <button className="button-secondary" onClick={beginImport}><FileUp size={16} /> Import report</button>}
+                <button className="button-primary" onClick={downloadCsv}><Download size={16} /> {role === 'Employee' ? 'Export my report' : 'Export report'}</button>
+              </div>
             </div>
-          </div>
+          </section>
 
           {localImport && !apiError ? <div className="demo-banner"><div className="demo-banner-icon"><FileSpreadsheet size={15} /></div><span><strong>Imported report</strong> &nbsp;Showing {localImport}. It is held in this browser only and clears on refresh.</span><button onClick={backToDemo}>Back to demo data <ArrowRight size={13} /></button></div> : (usingDemoData || !authHeader || apiError) && <div className={`demo-banner ${apiError ? 'demo-banner-error' : ''}`}><div className="demo-banner-icon"><CircleAlert size={15} /></div><span><strong>{apiError ? 'Attendance API unavailable' : usingDemoData ? 'Demo workspace' : 'No data source connected'}</strong> &nbsp;{apiError || (usingDemoData ? 'You’re viewing development sample records.' : 'No attendance records are loaded. Connect an authorized HRMS or eSSL source to view live attendance.')}</span>{!apiError && <button onClick={() => showNotice('No HRMS or eSSL connection is configured. Contact your administrator to set up an authorized integration.')}>Integration setup <ArrowRight size={13} /></button>}</div>}
 
           <section className="section-block" aria-label="Attendance overview">
             <div className="section-heading">
-              <div><h2>Today at a glance</h2><p>Attendance snapshot for {formatDate(selectedDate)}</p></div>
-              <div className="date-nav">
-                <button aria-label="Previous day" onClick={() => moveDate(-1)}><ChevronLeft size={16} /></button>
-                <CalendarDays size={15} />
-                <input type="date" value={selectedDate} onChange={(event) => setDate(event.target.value)} aria-label="Select attendance date" />
-                <button aria-label="Next day" onClick={() => moveDate(1)}><ChevronRight size={16} /></button>
-              </div>
+              <div><span className="section-chip">Today</span><h2>Daily summary</h2><p>Tap any card to see the employees behind the number.</p></div>
             </div>
             <div className="kpi-grid">
               <KpiCard icon={Users} label={role === 'Employee' ? 'My employee record' : 'Total employees'} value={total} foot={role === 'Employee' ? 'Personal attendance view' : 'In your workforce'} tone="green" onClick={() => setKpiDetail('total')} />
@@ -700,7 +714,7 @@ function App() {
 
           <section className="analytics-section section-block">
             <div className="section-heading charts-heading">
-              <div><h2>Attendance analytics</h2><p>Patterns and trends from available attendance records</p></div>
+              <div><span className="section-chip">Trends</span><h2>Attendance analytics</h2><p>How attendance is changing over days, months and departments.</p></div>
               <button className="text-button" onClick={() => { setActiveNav('Analytics'); showNotice('Analytics workspace selected.'); }}>View analytics <ArrowRight size={14} /></button>
             </div>
             <div className={`chart-grid chart-grid-${role.toLowerCase()}`}>
@@ -712,12 +726,12 @@ function App() {
                 <div className="chart-area trend-chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
-                      <CartesianGrid stroke="#eef2ef" vertical={false} />
+                      <CartesianGrid stroke="#edf1ee" vertical={false} />
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} dy={10} />
                       <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} tickFormatter={(value: number) => `${value}%`} ticks={[0, 25, 50, 75, 100]} />
                       <Tooltip content={<ChartTooltip suffix="%" />} />
-                      <Line type="monotone" dataKey="attendance" name="Attendance" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3, fill: '#16a34a', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} />
-                      <Line type="monotone" dataKey="onTime" name="On time" stroke="#86c79a" strokeWidth={2} strokeDasharray="4 5" dot={false} />
+                      <Line type="monotone" dataKey="attendance" name="Attendance" stroke="#2f6b4f" strokeWidth={2.5} dot={{ r: 3, fill: '#2f6b4f', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="onTime" name="On time" stroke="#a9cdb8" strokeWidth={2} strokeDasharray="4 5" dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -730,11 +744,11 @@ function App() {
                 <div className="department-chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={departmentsToday.slice(0, 6)} layout="vertical" margin={{ top: 2, right: 40, bottom: 0, left: 0 }}>
-                      <CartesianGrid stroke="#eef2ef" horizontal={false} />
+                      <CartesianGrid stroke="#edf1ee" horizontal={false} />
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis type="category" dataKey="department" width={124} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} />
                       <Tooltip content={<ChartTooltip suffix="%" />} />
-                      <Bar dataKey="rate" name="Attendance" fill="#22a55a" radius={[0, 4, 4, 0]} barSize={16}>
+                      <Bar dataKey="rate" name="Attendance" fill="#3f8a66" radius={[0, 4, 4, 0]} barSize={16}>
                         <LabelList dataKey="rate" position="right" formatter={(value: number) => `${value}%`} style={{ fill: '#414d45', fontSize: 12, fontWeight: 600 }} />
                       </Bar>
                     </BarChart>
@@ -751,12 +765,12 @@ function App() {
                 <div className="chart-area compact-chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={monthlyTrendData} margin={{ top: 8, right: 9, bottom: 0, left: -22 }}>
-                      <CartesianGrid stroke="#eef2ef" vertical={false} />
+                      <CartesianGrid stroke="#edf1ee" vertical={false} />
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} dy={7} />
                       <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} tickFormatter={(value: number) => `${value}%`} />
                       <Tooltip content={<ChartTooltip suffix="%" />} />
-                      <Line type="monotone" dataKey="attendance" name="Attendance" stroke="#16a34a" strokeWidth={2.25} dot={{ r: 3, fill: '#16a34a', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} />
-                      <Line type="monotone" dataKey="onTime" name="On time" stroke="#86c79a" strokeWidth={2} strokeDasharray="4 5" dot={false} />
+                      <Line type="monotone" dataKey="attendance" name="Attendance" stroke="#2f6b4f" strokeWidth={2.25} dot={{ r: 3, fill: '#2f6b4f', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="onTime" name="On time" stroke="#a9cdb8" strokeWidth={2} strokeDasharray="4 5" dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -770,11 +784,11 @@ function App() {
                 <div className="chart-area compact-chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={lateByDay} margin={{ top: 8, right: 9, bottom: 0, left: -25 }}>
-                      <CartesianGrid stroke="#eef2ef" vertical={false} />
+                      <CartesianGrid stroke="#edf1ee" vertical={false} />
                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} dy={7} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} allowDecimals={false} />
                       <Tooltip content={<ChartTooltip suffix=" employees" />} />
-                      <Bar dataKey="late" name="Late arrivals" fill="#e6a23c" radius={[4, 4, 0, 0]} barSize={22} />
+                      <Bar dataKey="late" name="Late arrivals" fill="#d9a441" radius={[4, 4, 0, 0]} barSize={22} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -788,12 +802,12 @@ function App() {
                 <div className="chart-area compact-chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={performanceData} margin={{ top: 8, right: 7, bottom: 0, left: -14 }} barCategoryGap={12}>
-                      <CartesianGrid stroke="#eef2ef" vertical={false} />
+                      <CartesianGrid stroke="#edf1ee" vertical={false} />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} dy={7} />
                       <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} tickFormatter={(value: number) => `${value}%`} />
                       <Tooltip content={<ChartTooltip suffix="%" />} />
                       <ReferenceLine y={90} stroke="#c6d9cc" strokeDasharray="3 4" />
-                      <Bar dataKey="rate" name="Attendance rate" fill="#22a55a" radius={[4, 4, 0, 0]} barSize={20} />
+                      <Bar dataKey="rate" name="Attendance rate" fill="#3f8a66" radius={[4, 4, 0, 0]} barSize={20} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -843,7 +857,7 @@ function App() {
               <div className="insight-footer"><span><span className="insight-status-dot" /> Derived from {attendanceRecords.length} {usingDemoData ? 'demo' : 'available'} records</span><button onClick={() => showNotice('Insights are generated from the currently available attendance data.')}>How it works <ArrowRight size={12} /></button></div>
             </div>
           </section>
-          <footer className="page-footer"><span>© {new Date().getFullYear()} JPM · Junior Processing Mills</span><span><span className="secure-dot" /> Secure workforce workspace</span><button onClick={() => showNotice('Integration layer prepared for future authorized HRMS and eSSL connectivity.')}>Integration status <span className="footer-demo">{demoMode ? 'Demo mode' : 'Not connected'}</span></button></footer>
+          <footer className="page-footer"><span>© {new Date().getFullYear()} JPM HRMS · Junior Processing Mills</span><span><span className="secure-dot" /> Secure workforce workspace</span><button onClick={() => showNotice('Integration layer prepared for future authorized HRMS and eSSL connectivity.')}>Integration status <span className="footer-demo">{demoMode ? 'Demo mode' : 'Not connected'}</span></button></footer>
           </> : <WorkspaceView
             view={activeNav}
             role={role}
@@ -914,7 +928,7 @@ function App() {
       {authOpen && <div className="modal-backdrop" onClick={() => setAuthOpen(false)}>
         <form className="import-modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" onSubmit={signIn} onClick={(event) => event.stopPropagation()}>
           <div className="modal-top"><div className="modal-icon"><KeyRound size={19} /></div><button className="icon-button" type="button" onClick={() => setAuthOpen(false)} aria-label="Close sign in"><X size={18} /></button></div>
-          <h2 id="auth-title">Sign in to JPM</h2><p className="modal-description">Use your authorized JPM attendance account. Credentials are sent only to the configured backend.</p>
+          <h2 id="auth-title">Sign in to JPM HRMS</h2><p className="modal-description">Use your authorized JPM attendance account. Credentials are sent only to the configured backend.</p>
           <label className="form-field">Username<input name="username" autoComplete="username" required /></label>
           <label className="form-field">Password<input name="password" type="password" autoComplete="current-password" required /></label>
           {authError && <p className="form-error" role="alert">{authError}</p>}
@@ -1199,12 +1213,12 @@ function WorkspaceView({
         <KpiCard icon={BriefcaseBusiness} label="Departments" value={departments.length} foot="With attendance records" tone="violet" />
       </div>
       <div className="workspace-analytics-grid">
-        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Daily attendance trend</h2><p>Attendance and on-time rate · last 7 days</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend} margin={{ top: 10, right: 12, bottom: 0, left: -14 }}><CartesianGrid stroke="#eef2ef" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}%`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Line type="monotone" dataKey="attendance" name="Attendance" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} /><Line type="monotone" dataKey="onTime" name="On time" stroke="#86c79a" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div></div>
-        {role !== 'Employee' && <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Department attendance</h2><p>Rates use the employee master and imported movements</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={departmentRows} layout="vertical" margin={{ top: 4, right: 15, bottom: 0, left: 0 }}><CartesianGrid stroke="#eef2ef" horizontal={false} /><XAxis type="number" domain={[0, 100]} tickFormatter={(value: number) => `${value}%`} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis type="category" dataKey="department" width={115} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Bar dataKey="rate" name="Attendance" fill="#22a55a" radius={[0, 5, 5, 0]} barSize={15} /></BarChart></ResponsiveContainer></div></div>}
-        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Weekly attendance trend</h2><p>Presence by calendar week</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={weekly} margin={{ top: 10, right: 12, bottom: 0, left: -14 }}><CartesianGrid stroke="#eef2ef" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}%`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Line type="monotone" dataKey="attendance" name="Attendance" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div></div>
-        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Monthly attendance trend</h2><p>Monthly attendance rate from imported records</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend} margin={{ top: 10, right: 12, bottom: 0, left: -14 }}><CartesianGrid stroke="#eef2ef" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}%`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Line type="monotone" dataKey="attendance" name="Attendance" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div></div>
-        {role === 'HR' && <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Working hours analysis</h2><p>Average paired-punch hours by employee · last 30 days</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={employeeWorkHours} margin={{ top: 10, right: 15, bottom: 0, left: -14 }}><CartesianGrid stroke="#eef2ef" vertical={false} /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}h`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="h" />} /><Bar dataKey="hours" name="Average hours" fill="#22a55a" radius={[4, 4, 0, 0]} barSize={23} /></BarChart></ResponsiveContainer></div></div>}
-        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Employee attendance history</h2><p>Daily working time and late minutes</p></div><select className="employee-chart-select" aria-label="Select employee attendance history" value={historyEmployee} onChange={(event) => setHistoryEmployee(event.target.value)}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={employeeHistoryChart} margin={{ top: 10, right: 15, bottom: 0, left: -14 }}><CartesianGrid stroke="#eef2ef" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis yAxisId="hours" axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}h`} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis yAxisId="late" orientation="right" width={40} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={(value: number) => `${value}m`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip /><Bar yAxisId="hours" dataKey="hours" name="Worked hours" fill="#22a55a" radius={[4, 4, 0, 0]} barSize={18} /><Line yAxisId="late" type="monotone" dataKey="late" name="Late minutes" stroke="#e8aa4e" strokeWidth={2} dot={false} /></ComposedChart></ResponsiveContainer></div></div>
+        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Daily attendance trend</h2><p>Attendance and on-time rate · last 7 days</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend} margin={{ top: 10, right: 12, bottom: 0, left: -14 }}><CartesianGrid stroke="#edf1ee" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}%`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Line type="monotone" dataKey="attendance" name="Attendance" stroke="#2f6b4f" strokeWidth={2.5} dot={{ r: 3 }} /><Line type="monotone" dataKey="onTime" name="On time" stroke="#a9cdb8" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div></div>
+        {role !== 'Employee' && <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Department attendance</h2><p>Rates use the employee master and imported movements</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={departmentRows} layout="vertical" margin={{ top: 4, right: 15, bottom: 0, left: 0 }}><CartesianGrid stroke="#edf1ee" horizontal={false} /><XAxis type="number" domain={[0, 100]} tickFormatter={(value: number) => `${value}%`} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis type="category" dataKey="department" width={115} axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Bar dataKey="rate" name="Attendance" fill="#3f8a66" radius={[0, 5, 5, 0]} barSize={15} /></BarChart></ResponsiveContainer></div></div>}
+        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Weekly attendance trend</h2><p>Presence by calendar week</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={weekly} margin={{ top: 10, right: 12, bottom: 0, left: -14 }}><CartesianGrid stroke="#edf1ee" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}%`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Line type="monotone" dataKey="attendance" name="Attendance" stroke="#2f6b4f" strokeWidth={2.5} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div></div>
+        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Monthly attendance trend</h2><p>Monthly attendance rate from imported records</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthlyTrend} margin={{ top: 10, right: 12, bottom: 0, left: -14 }}><CartesianGrid stroke="#edf1ee" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}%`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="%" />} /><Line type="monotone" dataKey="attendance" name="Attendance" stroke="#2f6b4f" strokeWidth={2.5} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div></div>
+        {role === 'HR' && <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Working hours analysis</h2><p>Average paired-punch hours by employee · last 30 days</p></div></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={employeeWorkHours} margin={{ top: 10, right: 15, bottom: 0, left: -14 }}><CartesianGrid stroke="#edf1ee" vertical={false} /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}h`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip content={<ChartTooltip suffix="h" />} /><Bar dataKey="hours" name="Average hours" fill="#3f8a66" radius={[4, 4, 0, 0]} barSize={23} /></BarChart></ResponsiveContainer></div></div>}
+        <div className="panel workspace-chart-panel"><div className="workspace-panel-heading"><div><h2>Employee attendance history</h2><p>Daily working time and late minutes</p></div><select className="employee-chart-select" aria-label="Select employee attendance history" value={historyEmployee} onChange={(event) => setHistoryEmployee(event.target.value)}>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></div><div className="workspace-chart"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={employeeHistoryChart} margin={{ top: 10, right: 15, bottom: 0, left: -14 }}><CartesianGrid stroke="#edf1ee" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis yAxisId="hours" axisLine={false} tickLine={false} tickFormatter={(value: number) => `${value}h`} tick={{ fill: '#616d65', fontSize: 12 }} /><YAxis yAxisId="late" orientation="right" width={40} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={(value: number) => `${value}m`} tick={{ fill: '#616d65', fontSize: 12 }} /><Tooltip /><Bar yAxisId="hours" dataKey="hours" name="Worked hours" fill="#3f8a66" radius={[4, 4, 0, 0]} barSize={18} /><Line yAxisId="late" type="monotone" dataKey="late" name="Late minutes" stroke="#e8aa4e" strokeWidth={2} dot={false} /></ComposedChart></ResponsiveContainer></div></div>
       </div>
       {role !== 'Employee' && <section className="panel workspace-panel department-breakdown"><div className="workspace-panel-heading"><div><h2>Department performance</h2><p>Employee counts and measured attendance indicators</p></div></div><div className="table-scroll"><table><thead><tr><th>DEPARTMENT</th><th>EMPLOYEES</th><th>PRESENT</th><th>ABSENT</th><th>LATE</th><th>EARLY</th><th>AVG HOURS</th></tr></thead><tbody>
         {departmentRows.map((item) => <tr key={item.department}><td>{item.department}</td><td>{item.employeeCount}</td><td>{item.presentCount}</td><td>{item.absentCount ?? '—'}</td><td>{item.lateArrivals}</td><td>{item.earlyDepartures}</td><td>{item.averageWorkingHours ? `${item.averageWorkingHours.toFixed(2)}h` : '—'}</td></tr>)}
@@ -1218,7 +1232,7 @@ function WorkspaceView({
       <section className="panel settings-card"><div className="settings-card-icon"><FileBarChart size={18} /></div><h2>Report imports</h2><p>Excel and text-based PDF reports are parsed by the API, validated against the employee master and retained in import history.</p><div className={`settings-status ${liveData ? '' : 'settings-unavailable'}`}><i /> {liveData ? 'Import history available to HR' : 'Sign in with an HR account to import'}</div><button className="button-secondary" onClick={onImport}>Open import dialog</button></section>
     </div>}
 
-    <footer className="page-footer"><span>© {new Date().getFullYear()} JPM · Junior Processing Mills</span><span><span className="secure-dot" /> {liveData ? 'Authenticated API session' : demoMode ? 'Demo workspace' : 'No live source connected'}</span><button onClick={() => onNotice('Integration layer is ready for future authorized HRMS and eSSL connectivity.')}>Integration status <span className="footer-demo">{liveData ? 'Connected' : demoMode ? 'Demo mode' : 'Not connected'}</span></button></footer>
+    <footer className="page-footer"><span>© {new Date().getFullYear()} JPM HRMS · Junior Processing Mills</span><span><span className="secure-dot" /> {liveData ? 'Authenticated API session' : demoMode ? 'Demo workspace' : 'No live source connected'}</span><button onClick={() => onNotice('Integration layer is ready for future authorized HRMS and eSSL connectivity.')}>Integration status <span className="footer-demo">{liveData ? 'Connected' : demoMode ? 'Demo mode' : 'Not connected'}</span></button></footer>
   </>;
 }
 
