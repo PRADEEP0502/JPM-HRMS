@@ -604,7 +604,49 @@ function App() {
         ? { icon: ChartNoAxesCombined, color: 'green', title: 'Top department', value: `${topDepartment.rate}%`, body: `${topDepartment.department} has the best attendance today.` }
         : { icon: ChartNoAxesCombined, color: 'green', title: 'Top department', value: '0%', body: 'No one is marked present today.' };
 
-  const insights: Insight[] = [
+  // ---- Company-wide insights (HR / MD) ----
+  // Use the selected date if a report exists for it, otherwise the latest report on or before it.
+  const reportDateList = [...new Set(attendanceRecords.map((record) => record.date))].sort();
+  const insightDate = reportDateList.includes(selectedDate)
+    ? selectedDate
+    : [...reportDateList].reverse().find((date) => date <= selectedDate) ?? reportDateList[reportDateList.length - 1];
+  const insightRecords = insightDate ? getRecordsForDate(insightDate) : [];
+  const isPresent = (record: { status: string }) => record.status !== 'Absent' && record.status !== 'No punching';
+  const rateOf = (records: typeof insightRecords) => records.length ? Math.round((records.filter(isPresent).length / records.length) * 100) : null;
+  const insightPresent = insightRecords.filter(isPresent).length;
+  const insightAbsent = insightRecords.filter((record) => record.status === 'Absent').length;
+  const insightLate = insightRecords.filter((record) => record.lateMinutes > 0).length;
+  const insightMissing = insightRecords.filter((record) => record.status === 'Missing punch' || record.status === 'No punching').length;
+  const insightRate = rateOf(insightRecords);
+  const previousReportDate = insightDate ? reportDateList[reportDateList.indexOf(insightDate) - 1] : undefined;
+  const previousRate = previousReportDate ? rateOf(getRecordsForDate(previousReportDate)) : null;
+  const insightDepartments = insightDate ? departmentData(insightDate).filter((item) => item.total > 0) : [];
+  const bestDepartment = insightDepartments[0];
+  const weakestDepartment = insightDepartments[insightDepartments.length - 1];
+  const insightDateLabel = insightDate ? formatDate(insightDate) : '';
+  const shortDate = insightDate ? new Date(`${insightDate}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
+  const rateChange = insightRate !== null && previousRate !== null ? insightRate - previousRate : null;
+
+  const companyInsights: Insight[] = [
+    insightRate === null
+      ? noData('Attendance', CircleCheck, 'green', 'Import an attendance report to see who came in.')
+      : { icon: CircleCheck, color: 'green', title: `Attendance · ${shortDate}`, value: `${insightRate}%`, body: `${insightPresent} of ${insightRecords.length} employees came in on ${insightDateLabel}.` },
+    !insightRecords.length
+      ? noData('Needs attention', CircleAlert, 'rose', 'Absent and missing punches appear after a report is imported.')
+      : { icon: CircleAlert, color: insightAbsent ? 'rose' : 'green', title: `Needs attention · ${shortDate}`, value: insightAbsent ? `${insightAbsent} absent` : 'Nobody absent', body: `${plural(insightLate, 'late arrival')} · ${insightMissing} missing punch${insightMissing === 1 ? '' : 'es'}.` },
+    lateCard,
+    !bestDepartment
+      ? noData('Department attendance', ChartNoAxesCombined, 'green', 'Department figures appear after a report is imported.')
+      : { icon: ChartNoAxesCombined, color: 'green', title: `Best department · ${shortDate}`, value: bestDepartment.department, body: `${bestDepartment.rate}% present (${bestDepartment.present}/${bestDepartment.total}).${weakestDepartment && weakestDepartment !== bestDepartment ? ` Lowest: ${weakestDepartment.department} ${weakestDepartment.rate}%.` : ''}` },
+    rateChange === null
+      ? noData('Change vs last report', Activity, 'blue', 'Needs at least two imported reports to compare.')
+      : { icon: Activity, color: rateChange > 0 ? 'green' : rateChange < 0 ? 'rose' : 'blue', title: 'Change vs last report', value: rateChange === 0 ? 'No change' : `${rateChange > 0 ? '+' : '−'}${Math.abs(rateChange)}%`, body: `${insightRate}% on ${shortDate} vs ${previousRate}% on ${formatDate(previousReportDate!)}.` },
+    latestMonth?.records
+      ? { icon: CalendarDays, color: 'green', title: `${latestMonth.date} attendance`, value: `${latestMonth.attendance}%`, body: `Average across ${plural(latestMonth.records, 'record')} this month.` }
+      : noData('This month', CalendarDays, 'green', 'No records for this month yet.'),
+  ];
+
+  const insights: Insight[] = role !== 'Employee' ? companyInsights : [
     lateCard,
     departmentCard,
     weeklyChange === null
@@ -882,7 +924,7 @@ function App() {
                   <p className="insight-body">{body}</p>
                 </div>)}
               </div>
-              <div className="insight-footer"><span><span className="insight-status-dot" /> Derived from {attendanceRecords.length} {usingDemoData ? 'demo' : 'available'} records</span><button onClick={() => showNotice('Insights are generated from the currently available attendance data.')}>How it works <ArrowRight size={12} /></button></div>
+              <div className="insight-footer"><span><span className="insight-status-dot" /> {insightDate ? <>Based on the report for <strong>{insightDateLabel}</strong>{insightDate !== selectedDate ? ' (latest available)' : ''} · {attendanceRecords.length} {usingDemoData ? 'demo' : ''} records in total</> : 'No attendance report imported yet'}</span><button onClick={() => showNotice('Insights are generated from the currently available attendance data.')}>How it works <ArrowRight size={12} /></button></div>
             </div>
           </section>
           <footer className="page-footer"><span>© {new Date().getFullYear()} JPM HRMS · Junior Processing Mills</span><span><span className="secure-dot" /> Secure workforce workspace</span><button onClick={() => showNotice('Integration layer prepared for future authorized HRMS and eSSL connectivity.')}>Integration status <span className="footer-demo">{demoMode ? 'Demo mode' : 'Not connected'}</span></button></footer>
