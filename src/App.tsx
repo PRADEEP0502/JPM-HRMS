@@ -46,7 +46,7 @@ const navItems = [
 ];
 
 const statusClass: Record<AttendanceStatus, string> = {
-  Present: 'present', Late: 'late', Absent: 'absent', 'On duty': 'on-duty', 'Early out': 'early', 'Missing punch': 'missing', 'No punching': 'missing',
+  Present: 'present', Late: 'late', Absent: 'absent', 'On duty': 'on-duty', 'Early out': 'early', 'Short hours': 'short', 'Missing punch': 'missing', 'No punching': 'missing',
 };
 
 const reportHeaders = [
@@ -251,7 +251,7 @@ function App() {
   const absent = apiSummary ? (apiSummary.absentEmployees ?? null) : visibleRecords.filter((record) => record.status === 'Absent').length;
   const late = hasAttendanceData ? (apiSummary?.lateComing ?? visibleRecords.filter((record) => record.lateMinutes > 0).length) : null;
   const early = hasAttendanceData ? (apiSummary?.earlyGoing ?? visibleRecords.filter((record) => record.earlyMinutes > 0).length) : null;
-  const onDuty = hasAttendanceData ? (apiSummary?.onDuty ?? visibleRecords.filter((record) => record.status === 'On duty').length) : null;
+  const shortHoursCount = hasAttendanceData ? visibleRecords.filter((record) => (record.shortMinutes ?? 0) > 0).length : null;
   const missingPunchCount = hasAttendanceData ? (apiSummary?.missingPunches ?? visibleRecords.filter((record) => record.status === 'Missing punch' || record.status === 'No punching').length) : null;
   const workedRecords = visibleRecords.filter((record) => record.hours > 0);
   const averageHours = hasAttendanceData
@@ -327,6 +327,7 @@ function App() {
     absent: { title: 'Absent', note: 'Marked absent for this date', match: (record) => record.status === 'Absent' },
     late: { title: 'Late arrivals', note: 'Arrived after the scheduled start', match: (record) => record.lateMinutes > 0 },
     early: { title: 'Early departures', note: 'Left before the scheduled end', match: (record) => record.earlyMinutes > 0 },
+    short: { title: 'Short hours', note: 'Worked less than the 12-hour shift (all departments except Office)', match: (record) => (record.shortMinutes ?? 0) > 0 },
     onDuty: { title: 'On duty', note: 'Marked on duty in the report', match: (record) => record.status === 'On duty' },
     missing: { title: 'Missing punches', note: 'Incomplete or no-punch records', match: (record) => record.status === 'Missing punch' || record.status === 'No punching' },
     hours: { title: 'Working hours', note: 'Employees with valid punch pairs, longest first', match: (record) => record.hours > 0 },
@@ -618,6 +619,7 @@ function App() {
   const insightAbsent = insightRecords.filter((record) => record.status === 'Absent').length;
   const insightLate = insightRecords.filter((record) => record.lateMinutes > 0).length;
   const insightMissing = insightRecords.filter((record) => record.status === 'Missing punch' || record.status === 'No punching').length;
+  const insightShort = insightRecords.filter((record) => (record.shortMinutes ?? 0) > 0).length;
   const insightRate = rateOf(insightRecords);
   const previousReportDate = insightDate ? reportDateList[reportDateList.indexOf(insightDate) - 1] : undefined;
   const previousRate = previousReportDate ? rateOf(getRecordsForDate(previousReportDate)) : null;
@@ -634,7 +636,7 @@ function App() {
       : { icon: CircleCheck, color: 'green', title: `Attendance · ${shortDate}`, value: `${insightRate}%`, body: `${insightPresent} of ${insightRecords.length} employees came in on ${insightDateLabel}.` },
     !insightRecords.length
       ? noData('Needs attention', CircleAlert, 'rose', 'Absent and missing punches appear after a report is imported.')
-      : { icon: CircleAlert, color: insightAbsent ? 'rose' : 'green', title: `Needs attention · ${shortDate}`, value: insightAbsent ? `${insightAbsent} absent` : 'Nobody absent', body: `${plural(insightLate, 'late arrival')} · ${insightMissing} missing punch${insightMissing === 1 ? '' : 'es'}.` },
+      : { icon: CircleAlert, color: insightAbsent ? 'rose' : 'green', title: `Needs attention · ${shortDate}`, value: insightAbsent ? `${insightAbsent} absent` : 'Nobody absent', body: `${plural(insightLate, 'late arrival')} · ${insightMissing} missing punch${insightMissing === 1 ? '' : 'es'} · ${insightShort} short of 12h.` },
     lateCard,
     !bestDepartment
       ? noData('Department attendance', ChartNoAxesCombined, 'green', 'Department figures appear after a report is imported.')
@@ -776,7 +778,7 @@ function App() {
               <KpiCard icon={CircleAlert} label="Absent today" value={absent} foot={absent === null ? 'Requires employee master, shift & imported date' : `${total ? Math.round((absent / total) * 100) : 0}% of workforce`} tone="rose" onClick={() => setKpiDetail('absent')} />
               <KpiCard icon={Clock3} label="Late arrivals" value={late} foot={late === null ? 'No imported report for this date' : 'After scheduled start'} tone="amber" onClick={() => setKpiDetail('late')} />
               <KpiCard icon={LogOut} label="Early departures" value={early} foot={early === null ? 'No imported report for this date' : 'Before scheduled end'} tone="blue" onClick={() => setKpiDetail('early')} />
-              <KpiCard icon={BriefcaseBusiness} label="On duty" value={onDuty} foot={onDuty === null ? 'No imported report for this date' : 'From explicit report status'} tone="violet" onClick={() => setKpiDetail('onDuty')} />
+              <KpiCard icon={Timer} label="Short hours" value={shortHoursCount} foot={shortHoursCount === null ? 'No imported report for this date' : 'Under 12h shift (except Office)'} tone="amber" onClick={() => setKpiDetail('short')} />
               <KpiCard icon={Fingerprint} label="Missing punches" value={missingPunchCount} foot={missingPunchCount === null ? 'No imported report for this date' : 'Incomplete or no-punch records'} tone="rose" onClick={() => setKpiDetail('missing')} />
               <KpiCard icon={Timer} label="Average working hours" value={averageHours} foot="From valid punch pairs" tone="blue" suffix="h" onClick={() => setKpiDetail('hours')} />
             </div>
@@ -1066,7 +1068,10 @@ function App() {
                 {came.length ? <ul className="dept-list">{came.map(({ employee, record }) => <li key={employee.id}>
                   <button onClick={() => openEmployee(employee.id)}>
                     <span className="dept-person"><strong>{employee.name}</strong><small>ID {employee.id} · In {record!.firstIn || '—'} · Out {record!.lastOut || '—'} · {record!.hours}h</small></span>
-                    {record!.lateMinutes > 0 ? <span className="status-pill late"><i />{record!.lateMinutes}m late</span> : <span className="status-pill present"><i />On time</span>}
+                    {record!.status === 'Missing punch' ? <span className="status-pill missing"><i />Missing punch</span>
+                      : record!.lateMinutes > 0 ? <span className="status-pill late"><i />{record!.lateMinutes}m late</span>
+                      : (record!.shortMinutes ?? 0) > 0 ? <span className="status-pill short"><i />{formatMinutes(record!.shortMinutes!)} short</span>
+                      : <span className="status-pill present"><i />On time</span>}
                   </button>
                 </li>)}</ul> : <p className="dept-empty">Nobody from this department came in.</p>}
               </div>
@@ -1222,7 +1227,7 @@ function WorkspaceView({
       <div className="date-nav"><CalendarDays size={15} /><input type="date" value={selectedDate} aria-label="Workspace attendance date" onChange={(event) => onDateChange(event.target.value)} /></div>
       {['Attendance', 'Employees', 'Alerts & notifications'].includes(view) && <label className="table-search workspace-search"><Search size={15} /><input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder={view === 'Employees' ? 'Search employee directory' : 'Search attendance records'} /></label>}
       {view === 'Attendance' && <label className="filter-select"><Filter size={14} /><select value={departmentFilter} onChange={(event) => { setDepartmentFilter(event.target.value); setTablePage(1); }}><option>All departments</option>{departmentOptions.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>}
-      {view === 'Attendance' && <label className="filter-select status-filter"><SlidersHorizontal size={14} /><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setTablePage(1); }}><option>All statuses</option>{['Present', 'Late', 'Absent', 'On duty', 'Early out', 'Missing punch', 'No punching'].map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={13} /></label>}
+      {view === 'Attendance' && <label className="filter-select status-filter"><SlidersHorizontal size={14} /><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setTablePage(1); }}><option>All statuses</option>{['Present', 'Late', 'Absent', 'On duty', 'Early out', 'Short hours', 'Missing punch', 'No punching'].map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={13} /></label>}
       <span className="workspace-date-label">{view === 'Employees' ? `${filteredEmployees.length} employees` : `${records.length} records · ${formatDate(selectedDate)}`}</span>
     </div>}
 
@@ -1364,6 +1369,8 @@ function KpiCard({ icon: Icon, label, value, foot, tone, suffix = '', onClick }:
     : <article className="kpi-card">{body}</article>;
 }
 
+const formatMinutes = (minutes: number) => minutes >= 60 ? `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m` : `${minutes}m`;
+
 function MovementRow({ record, onClick }: { record: AttendanceRecord; onClick?: () => void }) {
   const employee = getEmployee(record.employeeId);
   if (!employee) return null;
@@ -1374,7 +1381,7 @@ function MovementRow({ record, onClick }: { record: AttendanceRecord; onClick?: 
     <td className="time-cell">{record.firstIn || '—'}</td>
     <td className="time-cell">{record.lastOut || '—'}</td>
     <td className="punch-sequence" title={record.punches?.map((punch) => punch.rawValue).join(' → ') || 'No punch events'}>{record.punches?.length ? record.punches.map((punch) => punch.rawValue).join(' · ') : '—'}</td>
-    <td className="hours-cell">{record.hours ? `${record.hours.toFixed(1)}h` : '—'}</td>
+    <td className="hours-cell">{record.hours ? `${record.hours.toFixed(1)}h` : '—'}{record.shortMinutes ? <small className="short-note">−{formatMinutes(record.shortMinutes)} of 12h</small> : null}</td>
     <td className={record.lateMinutes ? 'late-cell' : 'time-cell'}>{record.lateMinutes ? `+${record.lateMinutes}m` : '—'}</td>
     <td className="time-cell">{record.earlyMinutes ? `${record.earlyMinutes}m` : '—'}</td>
     <td><span className={`status-pill ${statusClass[record.status]}`}><i />{record.status}</span></td>
@@ -1396,7 +1403,7 @@ function EmployeeTimeline({ employee, records, onClose }: {
         {!records.length && <div className="workspace-empty"><strong>No punch history</strong><p>No attendance movements are available for this employee.</p></div>}
         {records.map((record) => <article className="timeline-day" key={`${record.employeeId}-${record.date}`}>
           <div className="timeline-day-heading"><strong>{formatDate(record.date)}</strong><span className={`status-pill ${statusClass[record.status]}`}><i />{record.status}</span></div>
-          <div className="timeline-day-summary"><span>{record.hours.toFixed(2)} working hours</span><span>{record.lateMinutes ? `${record.lateMinutes}m late` : 'No late arrival'}</span><span>{record.earlyMinutes ? `${record.earlyMinutes}m early` : 'No early departure'}</span></div>
+          <div className="timeline-day-summary"><span>{record.hours.toFixed(2)} working hours</span><span>{record.lateMinutes ? `${record.lateMinutes}m late` : 'No late arrival'}</span><span>{record.earlyMinutes ? `${record.earlyMinutes}m early` : 'No early departure'}</span>{record.shortMinutes ? <span className="short-chip">{formatMinutes(record.shortMinutes)} short of 12h shift</span> : null}</div>
           {record.punches?.length ? <ol className="punch-timeline">{record.punches.map((punch) => <li key={`${punch.sequence}-${punch.time}-${punch.type}`}><span className={`punch-type ${punch.type.toLowerCase()}`}>{punch.type}</span><time>{new Date(punch.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</time><code>{punch.rawValue}</code></li>)}</ol> : <p className="form-hint">No individual punch events are available for this record.</p>}
         </article>)}
       </div>

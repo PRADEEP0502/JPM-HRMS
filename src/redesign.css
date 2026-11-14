@@ -196,6 +196,9 @@ tbody tr:hover td { background: var(--surface-soft); }
 .table-employee-link { font-size: 14px; }
 .status-pill { padding: 4px 11px; font-size: 13px; }
 .status-pill.present { color: var(--green-dark); }
+.status-pill.short { color: #9a3412; background: #ffedd5; }
+.short-note { display: block; margin-top: 2px; color: #9a3412; font-size: 11.5px; font-weight: 600; }
+.timeline-day-summary .short-chip { background: #ffedd5; color: #9a3412; font-weight: 600; }
 .table-footer { padding: 10px 22px; }
 .pagination button { border-radius: 999px; }
 .kpi-table thead th { background: var(--surface); }

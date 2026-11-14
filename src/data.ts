@@ -1,4 +1,4 @@
-export type AttendanceStatus = 'Present' | 'Late' | 'Absent' | 'On duty' | 'Early out' | 'Missing punch' | 'No punching';
+export type AttendanceStatus = 'Present' | 'Late' | 'Absent' | 'On duty' | 'Early out' | 'Short hours' | 'Missing punch' | 'No punching';
 export type Employee = {
   id: string;
   name: string;
@@ -18,6 +18,8 @@ export type AttendanceRecord = {
   hours: number;
   lateMinutes: number;
   earlyMinutes: number;
+  /** Minutes short of a 12 h shift (non-Office staff), from the backend */
+  shortMinutes?: number;
   status: AttendanceStatus;
   punches?: Array<{ sequence: number; time: string; type: 'IN' | 'OUT'; rawValue: string }>;
   originalData?: Record<string, string>;
@@ -145,11 +147,14 @@ export const replaceAttendanceData = (
     const earlyMin = Number(movement.earlyGoingMinutes ?? movement.early_min ?? 0);
     const hrs = Number(movement.workedMinutes ? (movement.workedMinutes / 60).toFixed(2) : (movement.hrs_decimal ?? 0));
     const statusStr = String(movement.status || '').toUpperCase();
+    const shortMin = Number(movement.shortMinutes ?? movement.short_min ?? 0);
+    // Priority: Absent / Missing punch > Late > Short hours > Early out > Present
     const status: AttendanceStatus = statusStr === 'ABSENT' ? 'Absent'
       : statusStr === 'INCOMPLETE' ? 'Missing punch'
       : statusStr === 'NO_PUNCHES' ? 'No punching'
       : statusStr === 'ON_DUTY' ? 'On duty'
       : lateMin > 0 ? 'Late'
+      : shortMin > 0 ? 'Short hours'
       : earlyMin > 0 ? 'Early out' : 'Present';
     return {
       employeeId: empId,
@@ -159,6 +164,7 @@ export const replaceAttendanceData = (
       hours: hrs,
       lateMinutes: lateMin,
       earlyMinutes: earlyMin,
+      shortMinutes: shortMin,
       status,
       punches: movement.punches || [],
     };

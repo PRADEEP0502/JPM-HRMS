@@ -137,12 +137,19 @@ def clean_punches(punches):
         out.append(p)
     return out
 
-NIGHT_SHIFT_START = 17 * 60   # first IN at/after 5 PM = night shift
+NIGHT_SHIFT_START   = 17 * 60   # first IN at/after 5 PM = night shift
+OFFICE_DEPARTMENTS  = {'office'}  # general shift with a lunch punch; every other department works 12 h shifts
+SHIFT_HOURS_12H     = 12
+SHORT_HOURS_GRACE_MIN = 15      # 12 h shift counts as short below 11 h 45 m
 
-def punch_status(punches):
+def is_office(dept):
+    return str(dept or '').strip().lower() in OFFICE_DEPARTMENTS
+
+def punch_status(punches, dept=None):
     """'INCOMPLETE' (missing punch) unless the day's punches are a clean IN→OUT sequence:
-      * day shift:   IN, OUT, IN, OUT (lunch out/in) — 6 punches for a double shift is also fine
-      * night shift: first IN at/after 5 PM — IN, OUT is enough (no lunch punches)
+      * Office day shift: IN, OUT, IN, OUT (lunch out/in); 6 punches is also fine
+      * Office night shift (first IN at/after 5 PM): IN, OUT is enough
+      * every other department (12 h shifts): IN, OUT is enough (4 or 6 punches also fine)
     Double-taps are ignored first (see clean_punches)."""
     punches = clean_punches(punches)
     if not punches:
@@ -151,8 +158,27 @@ def punch_status(punches):
     alternating = (types[0] == 'IN' and types[-1] == 'OUT'
                    and all(types[i] != types[i + 1] for i in range(len(types) - 1)))
     night_shift = types[0] == 'IN' and _minute_of(punches[0]) >= NIGHT_SHIFT_START
-    needed = 2 if night_shift else 4
+    needed = 4 if (dept is None or is_office(dept)) and not night_shift else 2
     return None if alternating and len(types) >= needed else 'INCOMPLETE'
+
+def short_minutes(record, dept):
+    """Minutes short of a 12 h shift for non-Office staff (0 when not short / not applicable)."""
+    if is_office(dept) or not record.get('punches') or record.get('status') in ('ABSENT', 'INCOMPLETE'):
+        return 0
+    worked = round((record.get('hrs_decimal') or 0) * 60)
+    missing = SHIFT_HOURS_12H * 60 - worked
+    return missing if missing > SHORT_HOURS_GRACE_MIN else 0
+
+def apply_rules(record, dept):
+    """Recompute missing-punch status and short hours for a record using the master department."""
+    if record.get('status') in (None, '', 'INCOMPLETE', 'SHORT_HOURS'):
+        record.pop('status', None)
+        if punch_status(record.get('punches'), dept):
+            record['status'] = 'INCOMPLETE'
+            if not record.get('hrs_decimal'):
+                record['hrs_decimal'] = round(paired_minutes(record['punches']) / 60.0, 2)
+    record['short_min'] = short_minutes(record, dept)
+    return record
 
 def paired_minutes(punches):
     """Minutes worked across complete IN→OUT pairs (handles night shifts crossing midnight)."""
@@ -268,7 +294,6 @@ def parse_excel(file_bytes):
             'in':             first_in,
             'out':            last_out,
             'punches':        punches,
-            **({'status': 'INCOMPLETE'} if punch_status(punches) else {}),
             'created_at':     datetime.utcnow(),
         })
 
@@ -524,16 +549,13 @@ def get_records():
         recs = absents if status_f == 'absent' else recs + absents
         recs.sort(key=lambda r: r['date'])
 
-    # Show the master department, not the one printed in the report.
-    # Also flag missing punches on records imported before the status field existed.
+    # Show the master department (not the report's) and apply the missing-punch / short-hours
+    # rules for that department — works for reports imported before these rules existed too.
     master = get_master()
     for r in recs:
         if r.get('ticket') in master:
             r['dept'] = master[r['ticket']]['dept']
-        if not r.get('status') and punch_status(r.get('punches')):
-            r['status'] = 'INCOMPLETE'
-            if not r.get('hrs_decimal'):
-                r['hrs_decimal'] = round(paired_minutes(r['punches']) / 60.0, 2)
+        apply_rules(r, r.get('dept'))
     return jsonify({"count": len(recs), "records": recs})
 
 @app.route('/summary')
@@ -602,7 +624,8 @@ def get_summary():
     unique_emps = len(present_tickets)
 
     # Absent = employees in the master list with no record on this (imported) date
-    master = get_master()
+    all_master = get_master()
+    master = dict(all_master)
     if match.get('dept'):
         master = {t: e for t, e in master.items() if e['dept'] == match['dept']}
     date_q = match.get('date')
@@ -619,9 +642,10 @@ def get_summary():
         "lateComing":              late_recs,
         "earlyGoing":              early_recs,
         "onDuty":                  0,
-        "missingPunches":          sum(1 for r in records_col.find(match, {'punches': 1, '_id': 0})
-                                       if punch_status(r.get('punches'))),
-        "averageWorkingHours":     8.0,
+        "missingPunches":          sum(1 for r in records_col.find(match, {'punches': 1, 'ticket': 1, 'dept': 1, '_id': 0})
+                                       if punch_status(r.get('punches'), all_master.get(r.get('ticket'), {}).get('dept') or r.get('dept'))),
+        "averageWorkingHours":     (round(sum(d['avg_hrs'] * d['total'] for d in by_date.values()) / total_recs, 2)
+                                    if total_recs else None),
         "employeeMasterAvailable": True,
         "importedReportAvailable": total_recs > 0,
         "total_records":           total_recs,
