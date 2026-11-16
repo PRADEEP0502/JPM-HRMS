@@ -770,7 +770,7 @@ function App() {
 
           <section className="section-block" aria-label="Attendance overview">
             <div className="section-heading">
-              <div><span className="section-chip">Today</span><h2>Daily summary</h2><p>Tap any card to see the employees behind the number.</p></div>
+              <div><span className="section-chip">{selectedDate === todayKey ? 'Today' : formatDate(selectedDate)}</span><h2>Daily summary</h2><p>Tap any card to see the employees behind the number.</p></div>
             </div>
             <div className="kpi-grid">
               <KpiCard icon={Users} label={role === 'Employee' ? 'My employee record' : 'Total employees'} value={total} foot={role === 'Employee' ? 'Personal attendance view' : 'In your workforce'} tone="green" onClick={() => setKpiDetail('total')} />
