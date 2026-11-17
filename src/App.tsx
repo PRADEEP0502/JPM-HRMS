@@ -623,6 +623,9 @@ function App() {
   const insightRate = rateOf(insightRecords);
   const previousReportDate = insightDate ? reportDateList[reportDateList.indexOf(insightDate) - 1] : undefined;
   const previousRate = previousReportDate ? rateOf(getRecordsForDate(previousReportDate)) : null;
+  const previousRecords = previousReportDate ? getRecordsForDate(previousReportDate) : [];
+  const previousPresent = previousRecords.filter(isPresent).length;
+  const previousShortDate = previousReportDate ? new Date(`${previousReportDate}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
   const insightDepartments = insightDate ? departmentData(insightDate).filter((item) => item.total > 0) : [];
   const bestDepartment = insightDepartments[0];
   const weakestDepartment = insightDepartments[insightDepartments.length - 1];
@@ -642,8 +645,8 @@ function App() {
       ? noData('Department attendance', ChartNoAxesCombined, 'green', 'Department figures appear after a report is imported.')
       : { icon: ChartNoAxesCombined, color: 'green', title: `Best department · ${shortDate}`, value: bestDepartment.department, body: `${bestDepartment.rate}% present (${bestDepartment.present}/${bestDepartment.total}).${weakestDepartment && weakestDepartment !== bestDepartment ? ` Lowest: ${weakestDepartment.department} ${weakestDepartment.rate}%.` : ''}` },
     rateChange === null
-      ? noData('Change vs last report', Activity, 'blue', 'Needs at least two imported reports to compare.')
-      : { icon: Activity, color: rateChange > 0 ? 'green' : rateChange < 0 ? 'rose' : 'blue', title: 'Change vs last report', value: rateChange === 0 ? 'No change' : `${rateChange > 0 ? '+' : '−'}${Math.abs(rateChange)}%`, body: `${insightRate}% on ${shortDate} vs ${previousRate}% on ${formatDate(previousReportDate!)}.` },
+      ? noData('Compared to last day', Activity, 'blue', 'Needs at least two imported reports to compare.')
+      : { icon: Activity, color: rateChange > 0 ? 'green' : rateChange < 0 ? 'rose' : 'blue', title: `Compared to ${previousShortDate}`, value: rateChange === 0 ? 'Same' : `${Math.abs(rateChange)}% ${rateChange > 0 ? 'more' : 'less'}`, body: `${shortDate}: ${insightPresent} of ${insightRecords.length} came · ${previousShortDate}: ${previousPresent} of ${previousRecords.length} came.` },
     latestMonth?.records
       ? { icon: CalendarDays, color: 'green', title: `${latestMonth.date} attendance`, value: `${latestMonth.attendance}%`, body: `Average across ${plural(latestMonth.records, 'record')} this month.` }
       : noData('This month', CalendarDays, 'green', 'No records for this month yet.'),
