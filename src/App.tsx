@@ -810,7 +810,7 @@ function App() {
               </div>
               {role !== 'Employee' && <div className="panel dept-panel">
                 <div className="panel-heading">
-                  <div><h3>Department attendance</h3><p>How many came in, out of each department’s employees · click a department to see who</p></div>
+                  <div><h3>Department attendance <span className="heading-date">{formatDate(selectedDate)}</span></h3><p>How many came in, out of each department’s employees · click a department to see who</p></div>
                   <div className="chart-legend dept-legend"><span><i className="legend-dot" style={{ background: '#3f8a66' }} /> 90%+</span><span><i className="legend-dot" style={{ background: '#d9a441' }} /> 75–89%</span><span><i className="legend-dot" style={{ background: '#c2553f' }} /> Below 75%</span></div>
                 </div>
                 <div className="department-chart" style={{ height: Math.max(120, departmentsToday.length * 30 + 10) }}>
