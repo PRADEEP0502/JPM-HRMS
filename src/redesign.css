@@ -265,3 +265,29 @@ tbody tr:hover td { background: var(--surface-soft); }
   .kpi-value { font-size: 30px; }
   .section-heading h2 { font-size: 22px; }
 }
+
+/* Employee popup: summary first, details on demand, print summary only */
+.timeline-range { margin: 14px 0 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.timeline-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.timeline-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--line, #e2e8e4); border-left-width: 4px; border-radius: 10px; background: var(--surface, #fff); }
+.timeline-stat span { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.timeline-stat strong { color: var(--ink); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.timeline-stat small { color: var(--muted); font-size: 12px; }
+.timeline-stat.green { border-left-color: #3f8a64; }
+.timeline-stat.rose { border-left-color: #c2554a; }
+.timeline-stat.amber { border-left-color: #d9a03f; }
+.timeline-stat.blue { border-left-color: #4a7bb7; }
+.timeline-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 12px; padding: 10px; border: 1px dashed var(--line, #cfd8d2); border-radius: 10px; background: transparent; color: var(--green-dark); font-weight: 600; cursor: pointer; }
+.timeline-toggle:hover { background: var(--green-soft); }
+.timeline-toggle svg { transition: transform .15s; }
+.timeline-toggle svg.rotated { transform: rotate(180deg); }
+
+@media print {
+  body:has(.timeline-print-root) * { visibility: hidden; }
+  body:has(.timeline-print-root) .timeline-print-root,
+  body:has(.timeline-print-root) .timeline-print-root * { visibility: visible; }
+  .timeline-print-root { position: absolute; inset: 0; background: #fff !important; backdrop-filter: none !important; align-items: flex-start; }
+  .timeline-print-root .timeline-modal { width: 100%; max-height: none; overflow: visible; box-shadow: none; border: 0; }
+  .timeline-print-root .no-print { display: none !important; }
+  .timeline-stat { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

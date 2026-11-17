@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, Clock3, Download, FileUp, Filter, LayoutDashboard, LogOut,
   Menu, MoreHorizontal, Search, Settings, ShieldCheck, Sparkles, Users, X,
   BriefcaseBusiness, ChartNoAxesCombined, FileBarChart, Fingerprint,
-  CalendarClock, CircleAlert, CircleCheck, UserPlus, KeyRound, Timer, FileSpreadsheet, SlidersHorizontal, Leaf,
+  CalendarClock, CircleAlert, CircleCheck, UserPlus, KeyRound, Timer, FileSpreadsheet, SlidersHorizontal, Leaf, Printer,
 } from 'lucide-react';
 import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceLine,
@@ -1391,26 +1391,57 @@ function MovementRow({ record, onClick }: { record: AttendanceRecord; onClick?: 
   </tr>;
 }
 
+const pluralDays = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
 function EmployeeTimeline({ employee, records, onClose }: {
   employee?: Employee;
   records: AttendanceRecord[];
   onClose: () => void;
 }) {
+  const [showDetails, setShowDetails] = useState(false);
   if (!employee) return null;
-  return <div className="modal-backdrop" onClick={onClose}>
+  const presentDays = records.filter((record) => record.status !== 'Absent' && record.status !== 'No punching').length;
+  const absentDays = records.length - presentDays;
+  const lateRecords = records.filter((record) => record.lateMinutes > 0);
+  const lateMinutes = lateRecords.reduce((sum, record) => sum + record.lateMinutes, 0);
+  const earlyRecords = records.filter((record) => record.earlyMinutes > 0);
+  const earlyMinutes = earlyRecords.reduce((sum, record) => sum + record.earlyMinutes, 0);
+  const shortDays = records.filter((record) => (record.shortMinutes ?? 0) > 0).length;
+  const missingDays = records.filter((record) => record.status === 'Missing punch').length;
+  const totalHours = records.reduce((sum, record) => sum + (record.hours || 0), 0);
+  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
+  const range = sorted.length ? (sorted.length === 1 ? formatDate(sorted[0].date) : `${formatDate(sorted[0].date)} – ${formatDate(sorted[sorted.length - 1].date)}`) : '';
+  const stats: Array<{ label: string; value: string; note?: string; tone: string }> = [
+    { label: 'Present', value: `${presentDays}`, note: pluralDays(presentDays, 'day'), tone: 'green' },
+    { label: 'Absent', value: `${absentDays}`, note: pluralDays(absentDays, 'day'), tone: 'rose' },
+    { label: 'Late', value: lateMinutes ? formatMinutes(lateMinutes) : '0m', note: `on ${pluralDays(lateRecords.length, 'day')}`, tone: 'amber' },
+    { label: 'Early out', value: earlyMinutes ? formatMinutes(earlyMinutes) : '0m', note: `on ${pluralDays(earlyRecords.length, 'day')}`, tone: 'blue' },
+    { label: 'Short of 12h', value: `${shortDays}`, note: pluralDays(shortDays, 'day'), tone: 'amber' },
+    { label: 'Missing punch', value: `${missingDays}`, note: pluralDays(missingDays, 'day'), tone: 'rose' },
+    { label: 'Total hours', value: `${totalHours.toFixed(1)}h`, note: presentDays ? `avg ${(totalHours / presentDays).toFixed(1)}h a day` : undefined, tone: 'blue' },
+  ];
+  return <div className="modal-backdrop timeline-print-root" onClick={onClose}>
     <section className="import-modal timeline-modal" role="dialog" aria-modal="true" aria-labelledby="timeline-title" onClick={(event) => event.stopPropagation()}>
-      <div className="modal-top"><div className="modal-icon"><Fingerprint size={19} /></div><button className="icon-button" onClick={onClose} aria-label="Close employee timeline"><X size={18} /></button></div>
+      <div className="modal-top no-print"><div className="modal-icon"><Fingerprint size={19} /></div><button className="icon-button" onClick={onClose} aria-label="Close employee timeline"><X size={18} /></button></div>
       <h2 id="timeline-title">{employee.name}</h2>
       <p className="modal-description">{employee.id} · {employee.department} · {employee.title}</p>
-      <div className="timeline-records">
-        {!records.length && <div className="workspace-empty"><strong>No punch history</strong><p>No attendance movements are available for this employee.</p></div>}
+      {!records.length ? <div className="workspace-empty"><strong>No punch history</strong><p>No attendance movements are available for this employee.</p></div> : <>
+        <p className="timeline-range">Attendance summary · {range}</p>
+        <div className="timeline-stats">
+          {stats.map((stat) => <div className={`timeline-stat ${stat.tone}`} key={stat.label}><span>{stat.label}</span><strong>{stat.value}</strong>{stat.note && <small>{stat.note}</small>}</div>)}
+        </div>
+        <button className="timeline-toggle no-print" onClick={() => setShowDetails((open) => !open)} aria-expanded={showDetails}>
+          {showDetails ? 'Hide full details' : 'Show full details'} <ChevronDown size={16} className={showDetails ? 'rotated' : ''} />
+        </button>
+      </>}
+      {showDetails && <div className="timeline-records no-print">
         {records.map((record) => <article className="timeline-day" key={`${record.employeeId}-${record.date}`}>
           <div className="timeline-day-heading"><strong>{formatDate(record.date)}</strong><span className={`status-pill ${statusClass[record.status]}`}><i />{record.status}</span></div>
           <div className="timeline-day-summary"><span>{record.hours.toFixed(2)} working hours</span><span>{record.lateMinutes ? `${record.lateMinutes}m late` : 'No late arrival'}</span><span>{record.earlyMinutes ? `${record.earlyMinutes}m early` : 'No early departure'}</span>{record.shortMinutes ? <span className="short-chip">{formatMinutes(record.shortMinutes)} short of 12h shift</span> : null}</div>
           {record.punches?.length ? <ol className="punch-timeline">{record.punches.map((punch) => <li key={`${punch.sequence}-${punch.time}-${punch.type}`}><span className={`punch-type ${punch.type.toLowerCase()}`}>{punch.type}</span><time>{new Date(punch.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</time><code>{punch.rawValue}</code></li>)}</ol> : <p className="form-hint">No individual punch events are available for this record.</p>}
         </article>)}
-      </div>
-      <div className="modal-actions"><button className="button-secondary" onClick={onClose}>Close</button></div>
+      </div>}
+      <div className="modal-actions no-print">{records.length > 0 && <button className="button-secondary" onClick={() => window.print()}><Printer size={16} /> Print summary</button>}<button className="button-secondary" onClick={onClose}>Close</button></div>
     </section>
   </div>;
 }
