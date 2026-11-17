@@ -324,3 +324,21 @@ button.timeline-stat:hover { border-color: #b9d3c3; box-shadow: 0 6px 16px rgba(
 button.timeline-stat.active { border-color: var(--green); background: var(--green-soft); box-shadow: 0 0 0 3px rgba(47, 107, 79, .12); }
 button.timeline-stat.active::before { opacity: 1; }
 button.timeline-stat.active .timeline-stat-icon { background: var(--green); color: #fff; }
+
+/* Reports: monthly summary for all employees */
+.monthly-summary-table td { font-variant-numeric: tabular-nums; }
+.monthly-summary-table .summary-sub { display: block; color: var(--muted); font-size: 11px; }
+
+@media print {
+  body.print-monthly-summary * { visibility: hidden; }
+  body.print-monthly-summary .monthly-summary-print,
+  body.print-monthly-summary .monthly-summary-print * { visibility: visible; }
+  body.print-monthly-summary .monthly-summary-print { position: absolute; top: 0; left: 0; width: 100%; margin: 0; padding: 0; border: 0; box-shadow: none; background: #fff; }
+  body.print-monthly-summary .monthly-summary-print .no-print { display: none !important; }
+  body.print-monthly-summary .monthly-summary-print .table-scroll { overflow: visible; max-height: none; }
+  body.print-monthly-summary .monthly-summary-table { width: 100%; font-size: 11px; }
+  body.print-monthly-summary .monthly-summary-table th,
+  body.print-monthly-summary .monthly-summary-table td { padding: 4px 6px; }
+  body.print-monthly-summary .monthly-summary-table tr { break-inside: avoid; }
+  body.print-monthly-summary .table-employee-link small { display: inline; margin-left: 4px; }
+}

@@ -1128,6 +1128,35 @@ function WorkspaceView({
   const [tablePage, setTablePage] = useState(1);
   const [historyEmployee, setHistoryEmployee] = useState(employees[0]?.id ?? '');
   const workspacePageSize = 10;
+  const [summaryDepartment, setSummaryDepartment] = useState('All departments');
+  const summaryMonth = selectedDate.slice(0, 7);
+  const summaryMonthLabel = new Date(`${summaryMonth}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const monthlySummary = employees
+    .filter((employee) => summaryDepartment === 'All departments' || employee.department === summaryDepartment)
+    .map((employee) => {
+      const rows = allRecords.filter((record) => record.employeeId === employee.id && record.date.startsWith(summaryMonth));
+      const countOf = (key: DayFilter) => rows.filter(dayFilters[key].test).length;
+      return {
+        employee,
+        days: rows.length,
+        present: countOf('present'),
+        absent: countOf('absent'),
+        lateDays: countOf('late'),
+        lateMinutes: rows.reduce((sum, record) => sum + record.lateMinutes, 0),
+        earlyDays: countOf('early'),
+        earlyMinutes: rows.reduce((sum, record) => sum + record.earlyMinutes, 0),
+        short: countOf('short'),
+        missing: countOf('missing'),
+        hours: rows.reduce((sum, record) => sum + (record.hours || 0), 0),
+      };
+    })
+    .sort((a, b) => a.employee.department.localeCompare(b.employee.department) || a.employee.name.localeCompare(b.employee.name));
+  const printMonthlySummary = () => {
+    document.body.classList.add('print-monthly-summary');
+    const cleanup = () => { document.body.classList.remove('print-monthly-summary'); window.removeEventListener('afterprint', cleanup); };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  };
   const query = search.trim().toLowerCase();
   const departmentOptions = [...new Set(employees.map((employee) => employee.department))].sort();
   const filteredEmployees = employees.filter((employee) =>
@@ -1303,6 +1332,29 @@ function WorkspaceView({
         <div className="table-scroll"><table><thead><tr><th>EMPLOYEE</th><th>DEPARTMENT</th><th>DATE</th><th>FIRST IN</th><th>LAST OUT</th><th>PUNCH SEQUENCE</th><th>HOURS</th><th>LATE</th><th>EARLY GOING</th><th>STATUS</th></tr></thead><tbody>
           {records.map((record) => <MovementRow key={record.employeeId} record={record} onClick={() => onEmployeeClick(record.employeeId)} />)}
           {!records.length && <tr><td className="empty-table" colSpan={10}>No records available for this date.</td></tr>}
+        </tbody></table></div>
+      </section>
+      <section className="panel workspace-panel monthly-summary-print">
+        <div className="workspace-panel-heading">
+          <div><h2>Monthly summary · {summaryMonthLabel}</h2><p>Present, absent, late and hours for every employee{summaryDepartment !== 'All departments' ? ` in ${summaryDepartment}` : ''}</p></div>
+          <div className="heading-actions no-print">
+            <label className="filter-select"><Filter size={14} /><select value={summaryDepartment} onChange={(event) => setSummaryDepartment(event.target.value)}><option>All departments</option>{departmentOptions.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={13} /></label>
+            <button className="button-primary" onClick={printMonthlySummary} disabled={!monthlySummary.length}><Printer size={14} /> Print summary</button>
+          </div>
+        </div>
+        <div className="table-scroll"><table className="monthly-summary-table"><thead><tr><th>EMPLOYEE</th><th>DEPARTMENT</th><th>PRESENT</th><th>ABSENT</th><th>LATE</th><th>EARLY OUT</th><th>SHORT OF 12H</th><th>MISSING PUNCH</th><th>TOTAL HOURS</th></tr></thead><tbody>
+          {monthlySummary.map((row) => <tr key={row.employee.id}>
+            <td><button className="table-employee-link" onClick={() => onEmployeeClick(row.employee.id)}>{row.employee.name}<small>{row.employee.id}</small></button></td>
+            <td className="department-cell">{row.employee.department}</td>
+            <td>{row.days ? row.present : '—'}</td>
+            <td>{row.days ? row.absent : '—'}</td>
+            <td>{row.lateDays ? <>{formatMinutes(row.lateMinutes)}<small className="summary-sub">{pluralDays(row.lateDays, 'day')}</small></> : row.days ? '0' : '—'}</td>
+            <td>{row.earlyDays ? <>{formatMinutes(row.earlyMinutes)}<small className="summary-sub">{pluralDays(row.earlyDays, 'day')}</small></> : row.days ? '0' : '—'}</td>
+            <td>{row.days ? row.short : '—'}</td>
+            <td>{row.days ? row.missing : '—'}</td>
+            <td>{row.days ? `${row.hours.toFixed(1)}h` : '—'}</td>
+          </tr>)}
+          {!monthlySummary.length && <tr><td className="empty-table" colSpan={9}>No employees to summarise.</td></tr>}
         </tbody></table></div>
       </section>
       <section className="panel workspace-panel import-history-panel">
