@@ -291,3 +291,23 @@ tbody tr:hover td { background: var(--surface-soft); }
   .timeline-print-root .no-print { display: none !important; }
   .timeline-stat { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Clickable month summary cards + day cards */
+button.timeline-stat { text-align: left; font: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+button.timeline-stat:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(20, 50, 35, .08); }
+button.timeline-stat.active { border-color: var(--green); box-shadow: 0 0 0 2px var(--green-soft); background: var(--green-soft); }
+.timeline-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.timeline-filter-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.timeline-filter-heading button { border: 0; background: none; color: var(--green-dark); font-weight: 600; font-size: 13px; cursor: pointer; }
+.day-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.day-card { padding: 12px; border: 1px solid var(--line, #e2e8e4); border-radius: 12px; background: var(--surface, #fff); }
+.day-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; font-size: 13.5px; }
+.day-card-top .status-pill { font-size: 11px; }
+.day-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 0; }
+.day-card dl div { display: flex; flex-direction: column; }
+.day-card dt { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+.day-card dd { margin: 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.day-card dd.warn { color: #b45309; }
+.day-card-note { margin: 8px 0 0; padding: 3px 8px; border-radius: 6px; background: #ffedd5; color: #9a3412; font-size: 12px; font-weight: 600; }
+.day-card-punches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.day-card-punches .punch-type { font-size: 11px; padding: 2px 6px; border-radius: 5px; }

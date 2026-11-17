@@ -1084,7 +1084,7 @@ function App() {
           </section>
         </div>;
       })()}
-      {selectedEmployee && <EmployeeTimeline employee={employees.find((employee) => employee.id === selectedEmployee)} records={attendanceRecords.filter((record) => record.employeeId === selectedEmployee).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)} onClose={() => setSelectedEmployee(null)} />}
+      {selectedEmployee && <EmployeeTimeline employee={employees.find((employee) => employee.id === selectedEmployee)} month={selectedDate.slice(0, 7)} records={attendanceRecords.filter((record) => record.employeeId === selectedEmployee && record.date.startsWith(selectedDate.slice(0, 7))).sort((a, b) => b.date.localeCompare(a.date))} onClose={() => setSelectedEmployee(null)} />}
     </div>
   );
 }
@@ -1393,53 +1393,73 @@ function MovementRow({ record, onClick }: { record: AttendanceRecord; onClick?: 
 
 const pluralDays = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-function EmployeeTimeline({ employee, records, onClose }: {
+type DayFilter = 'all' | 'present' | 'absent' | 'late' | 'early' | 'short' | 'missing';
+
+const dayFilters: Record<DayFilter, { title: string; test: (record: AttendanceRecord) => boolean }> = {
+  all: { title: 'All days', test: () => true },
+  present: { title: 'Days present', test: (record) => record.status !== 'Absent' && record.status !== 'No punching' },
+  absent: { title: 'Days absent', test: (record) => record.status === 'Absent' || record.status === 'No punching' },
+  late: { title: 'Late days', test: (record) => record.lateMinutes > 0 },
+  early: { title: 'Early out days', test: (record) => record.earlyMinutes > 0 },
+  short: { title: 'Days short of 12h', test: (record) => (record.shortMinutes ?? 0) > 0 },
+  missing: { title: 'Missing punch days', test: (record) => record.status === 'Missing punch' },
+};
+
+const punchTime = (time: string) => new Date(time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+function EmployeeTimeline({ employee, records, month, onClose }: {
   employee?: Employee;
   records: AttendanceRecord[];
+  month: string;
   onClose: () => void;
 }) {
-  const [showDetails, setShowDetails] = useState(false);
+  const [filter, setFilter] = useState<DayFilter | null>(null);
   if (!employee) return null;
-  const presentDays = records.filter((record) => record.status !== 'Absent' && record.status !== 'No punching').length;
-  const absentDays = records.length - presentDays;
-  const lateRecords = records.filter((record) => record.lateMinutes > 0);
-  const lateMinutes = lateRecords.reduce((sum, record) => sum + record.lateMinutes, 0);
-  const earlyRecords = records.filter((record) => record.earlyMinutes > 0);
-  const earlyMinutes = earlyRecords.reduce((sum, record) => sum + record.earlyMinutes, 0);
-  const shortDays = records.filter((record) => (record.shortMinutes ?? 0) > 0).length;
-  const missingDays = records.filter((record) => record.status === 'Missing punch').length;
+  const count = (key: DayFilter) => records.filter(dayFilters[key].test).length;
+  const presentDays = count('present');
+  const lateMinutes = records.reduce((sum, record) => sum + record.lateMinutes, 0);
+  const earlyMinutes = records.reduce((sum, record) => sum + record.earlyMinutes, 0);
   const totalHours = records.reduce((sum, record) => sum + (record.hours || 0), 0);
-  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
-  const range = sorted.length ? (sorted.length === 1 ? formatDate(sorted[0].date) : `${formatDate(sorted[0].date)} – ${formatDate(sorted[sorted.length - 1].date)}`) : '';
-  const stats: Array<{ label: string; value: string; note?: string; tone: string }> = [
-    { label: 'Present', value: `${presentDays}`, note: pluralDays(presentDays, 'day'), tone: 'green' },
-    { label: 'Absent', value: `${absentDays}`, note: pluralDays(absentDays, 'day'), tone: 'rose' },
-    { label: 'Late', value: lateMinutes ? formatMinutes(lateMinutes) : '0m', note: `on ${pluralDays(lateRecords.length, 'day')}`, tone: 'amber' },
-    { label: 'Early out', value: earlyMinutes ? formatMinutes(earlyMinutes) : '0m', note: `on ${pluralDays(earlyRecords.length, 'day')}`, tone: 'blue' },
-    { label: 'Short of 12h', value: `${shortDays}`, note: pluralDays(shortDays, 'day'), tone: 'amber' },
-    { label: 'Missing punch', value: `${missingDays}`, note: pluralDays(missingDays, 'day'), tone: 'rose' },
-    { label: 'Total hours', value: `${totalHours.toFixed(1)}h`, note: presentDays ? `avg ${(totalHours / presentDays).toFixed(1)}h a day` : undefined, tone: 'blue' },
+  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const stats: Array<{ key: DayFilter; label: string; value: string; note?: string; tone: string }> = [
+    { key: 'present', label: 'Present', value: `${presentDays}`, note: pluralDays(presentDays, 'day'), tone: 'green' },
+    { key: 'absent', label: 'Absent', value: `${count('absent')}`, note: pluralDays(count('absent'), 'day'), tone: 'rose' },
+    { key: 'late', label: 'Late', value: lateMinutes ? formatMinutes(lateMinutes) : '0m', note: `on ${pluralDays(count('late'), 'day')}`, tone: 'amber' },
+    { key: 'early', label: 'Early out', value: earlyMinutes ? formatMinutes(earlyMinutes) : '0m', note: `on ${pluralDays(count('early'), 'day')}`, tone: 'blue' },
+    { key: 'short', label: 'Short of 12h', value: `${count('short')}`, note: pluralDays(count('short'), 'day'), tone: 'amber' },
+    { key: 'missing', label: 'Missing punch', value: `${count('missing')}`, note: pluralDays(count('missing'), 'day'), tone: 'rose' },
+    { key: 'all', label: 'Total hours', value: `${totalHours.toFixed(1)}h`, note: presentDays ? `avg ${(totalHours / presentDays).toFixed(1)}h a day` : undefined, tone: 'blue' },
   ];
+  const shown = filter ? records.filter(dayFilters[filter].test) : [];
+  const toggle = (key: DayFilter) => setFilter((current) => current === key ? null : key);
   return <div className="modal-backdrop timeline-print-root" onClick={onClose}>
     <section className="import-modal timeline-modal" role="dialog" aria-modal="true" aria-labelledby="timeline-title" onClick={(event) => event.stopPropagation()}>
       <div className="modal-top no-print"><div className="modal-icon"><Fingerprint size={19} /></div><button className="icon-button" onClick={onClose} aria-label="Close employee timeline"><X size={18} /></button></div>
       <h2 id="timeline-title">{employee.name}</h2>
       <p className="modal-description">{employee.id} · {employee.department} · {employee.title}</p>
-      {!records.length ? <div className="workspace-empty"><strong>No punch history</strong><p>No attendance movements are available for this employee.</p></div> : <>
-        <p className="timeline-range">Attendance summary · {range}</p>
+      <p className="timeline-range">{monthLabel} summary · {pluralDays(records.length, 'day')} recorded</p>
+      {!records.length ? <div className="workspace-empty"><strong>No records this month</strong><p>No attendance is available for {employee.name} in {monthLabel}.</p></div> : <>
         <div className="timeline-stats">
-          {stats.map((stat) => <div className={`timeline-stat ${stat.tone}`} key={stat.label}><span>{stat.label}</span><strong>{stat.value}</strong>{stat.note && <small>{stat.note}</small>}</div>)}
+          {stats.map((stat) => <button type="button" className={`timeline-stat ${stat.tone} ${filter === stat.key ? 'active' : ''}`} key={stat.label} onClick={() => toggle(stat.key)} aria-pressed={filter === stat.key}><span>{stat.label}</span><strong>{stat.value}</strong>{stat.note && <small>{stat.note}</small>}</button>)}
         </div>
-        <button className="timeline-toggle no-print" onClick={() => setShowDetails((open) => !open)} aria-expanded={showDetails}>
-          {showDetails ? 'Hide full details' : 'Show full details'} <ChevronDown size={16} className={showDetails ? 'rotated' : ''} />
-        </button>
+        <p className="timeline-hint no-print">Tap a card to see those days.</p>
       </>}
-      {showDetails && <div className="timeline-records no-print">
-        {records.map((record) => <article className="timeline-day" key={`${record.employeeId}-${record.date}`}>
-          <div className="timeline-day-heading"><strong>{formatDate(record.date)}</strong><span className={`status-pill ${statusClass[record.status]}`}><i />{record.status}</span></div>
-          <div className="timeline-day-summary"><span>{record.hours.toFixed(2)} working hours</span><span>{record.lateMinutes ? `${record.lateMinutes}m late` : 'No late arrival'}</span><span>{record.earlyMinutes ? `${record.earlyMinutes}m early` : 'No early departure'}</span>{record.shortMinutes ? <span className="short-chip">{formatMinutes(record.shortMinutes)} short of 12h shift</span> : null}</div>
-          {record.punches?.length ? <ol className="punch-timeline">{record.punches.map((punch) => <li key={`${punch.sequence}-${punch.time}-${punch.type}`}><span className={`punch-type ${punch.type.toLowerCase()}`}>{punch.type}</span><time>{new Date(punch.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</time><code>{punch.rawValue}</code></li>)}</ol> : <p className="form-hint">No individual punch events are available for this record.</p>}
-        </article>)}
+      {filter && <div className="timeline-records no-print">
+        <div className="timeline-filter-heading"><strong>{dayFilters[filter].title} · {shown.length}</strong>{filter !== 'all' && <button type="button" onClick={() => setFilter('all')}>Show all days</button>}</div>
+        {!shown.length ? <p className="form-hint">No days to show.</p> : <div className="day-card-grid">
+          {shown.map((record) => <article className="day-card" key={`${record.employeeId}-${record.date}`}>
+            <div className="day-card-top"><strong>{new Date(`${record.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</strong><span className={`status-pill ${statusClass[record.status]}`}><i />{record.status}</span></div>
+            <dl>
+              <div><dt>In</dt><dd>{record.firstIn || '—'}</dd></div>
+              <div><dt>Out</dt><dd>{record.lastOut || '—'}</dd></div>
+              <div><dt>Hours</dt><dd>{record.hours ? `${record.hours.toFixed(1)}h` : '—'}</dd></div>
+              <div><dt>Late</dt><dd className={record.lateMinutes ? 'warn' : ''}>{record.lateMinutes ? `${record.lateMinutes}m` : '—'}</dd></div>
+            </dl>
+            {record.shortMinutes ? <p className="day-card-note">{formatMinutes(record.shortMinutes)} short of 12h</p> : null}
+            {record.earlyMinutes ? <p className="day-card-note">{record.earlyMinutes}m early out</p> : null}
+            {record.punches?.length ? <div className="day-card-punches">{record.punches.map((punch) => <span key={`${punch.sequence}-${punch.time}-${punch.type}`} className={`punch-type ${punch.type.toLowerCase()}`}>{punch.type} {punchTime(punch.time)}</span>)}</div> : null}
+          </article>)}
+        </div>}
       </div>}
       <div className="modal-actions no-print">{records.length > 0 && <button className="button-secondary" onClick={() => window.print()}><Printer size={16} /> Print summary</button>}<button className="button-secondary" onClick={onClose}>Close</button></div>
     </section>
