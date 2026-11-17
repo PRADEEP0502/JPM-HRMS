@@ -342,3 +342,28 @@ button.timeline-stat.active .timeline-stat-icon { background: var(--green); colo
   body.print-monthly-summary .monthly-summary-table tr { break-inside: avoid; }
   body.print-monthly-summary .table-employee-link small { display: inline; margin-left: 4px; }
 }
+
+/* Settings: WhatsApp alerts */
+.wa-panel { margin-top: 4px; }
+.wa-title { display: flex; gap: 12px; align-items: flex-start; }
+.wa-title p { max-width: 640px; }
+.wa-bot-status { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 16px; padding: 12px 14px; border: 1px solid var(--line, #e2e8e4); border-radius: 12px; background: #fffbeb; }
+.wa-bot-status.ok { background: var(--green-soft); }
+.wa-bot-status > i { flex: none; width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: #d97706; }
+.wa-bot-status.ok > i { background: var(--green); }
+.wa-bot-status div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.wa-bot-status span { color: var(--muted); }
+.wa-bot-status .wa-bot-error { color: #b42318; }
+.wa-settings-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.wa-settings-row label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.wa-settings-row input:not([type="checkbox"]), .wa-table input { min-height: 36px; padding: 6px 10px; border: 1px solid var(--line, #dfe8e2); border-radius: 8px; background: var(--surface, #fff); color: var(--ink); font: inherit; font-size: 14px; }
+.wa-settings-row label:nth-child(2) input { width: min(320px, 70vw); }
+.wa-settings-row .wa-switch { flex-direction: row; align-items: center; gap: 8px; min-height: 36px; color: var(--ink); font-size: 14px; }
+.wa-switch input { width: 18px; height: 18px; accent-color: var(--green); }
+.wa-subheading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 22px 0 10px; font-size: 15px; font-weight: 700; }
+.wa-subheading small { color: var(--muted); font-size: 12.5px; font-weight: 500; }
+.wa-table input { width: 100%; min-width: 130px; }
+.wa-table td { vertical-align: middle; }
+.wa-id { display: block; color: var(--muted); font-size: 11.5px; }
+.wa-search { max-width: 360px; margin-bottom: 10px; }
+.wa-phone-list { max-height: 460px; overflow: auto; }

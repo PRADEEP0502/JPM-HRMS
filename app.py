@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from pymongo import MongoClient, ASCENDING, UpdateOne
 import os, re, uuid, json
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 import xlrd
 
@@ -790,6 +790,174 @@ def reset():
         return jsonify({"status": "cleared", "deleted": r.deleted_count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ── WHATSAPP ALERTS ──────────────────────────────────────────────────────
+# A small bot on an office PC (see whatsapp-bot/) posts the latest report's late arrivals and
+# missing punches to a WhatsApp group once a day, tagging each department's HOD and the employee.
+# HR keeps phone numbers, HODs, the group name and the send time here from the Settings page.
+# The bot's feed contains phone numbers, so it requires the WA_BOT_TOKEN shared secret.
+WA_DEFAULTS = {'enabled': False, 'groupName': '', 'sendTime': '10:00'}
+WA_LOOKBACK_DAYS = 3          # never send reports older than this (avoids a backlog after downtime)
+WA_ONLINE_SECONDS = 180       # bot counts as online if it checked in within this window
+TIME_RE = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
+
+def _wa(name):
+    get_db()
+    return _db[name]
+
+def normalise_phone(value):
+    """Digits only, with India's 91 added to 10-digit numbers. '' clears the number."""
+    digits = re.sub(r'\D', '', str(value or ''))
+    if not digits:
+        return ''
+    if len(digits) == 10:
+        digits = '91' + digits
+    if not 11 <= len(digits) <= 15:
+        raise ValueError('Enter a valid mobile number, e.g. 98765 43210.')
+    return digits
+
+def _wa_settings():
+    doc = _wa('wa_settings').find_one({'_id': 'settings'}, {'_id': 0}) or {}
+    return {**WA_DEFAULTS, **doc}
+
+def _bot_authorised():
+    token = os.environ.get('WA_BOT_TOKEN', '')
+    return bool(token) and request.headers.get('X-Bot-Token', '') == token
+
+@app.route('/api/whatsapp/settings', methods=['GET'])
+def wa_get_settings():
+    try:
+        settings = _wa_settings()
+        hods = {h['department']: {'name': h.get('name', ''), 'phone': h.get('phone', '')}
+                for h in _wa('wa_hods').find({}, {'_id': 0})}
+        phones = {e['ticket']: e['phone'] for e in _db['employee_master'].find({'phone': {'$nin': [None, '']}}, {'_id': 0, 'ticket': 1, 'phone': 1})}
+        status = _wa('wa_settings').find_one({'_id': 'bot_status'}, {'_id': 0}) or {}
+        seen = status.get('seenAt')
+        online = bool(seen) and (datetime.utcnow() - seen).total_seconds() < WA_ONLINE_SECONDS
+        departments = sorted({e['dept'] for e in get_master().values()})
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify({
+        'settings': settings, 'hods': hods, 'phones': phones, 'departments': departments,
+        'tokenConfigured': bool(os.environ.get('WA_BOT_TOKEN')),
+        'bot': {'online': online, 'state': status.get('state', 'never-connected') if online else 'offline',
+                'groupFound': status.get('groupFound'), 'lastSentDate': status.get('lastSentDate'),
+                'lastError': status.get('lastError'), 'seenAt': seen.isoformat() + 'Z' if seen else None},
+    })
+
+@app.route('/api/whatsapp/settings', methods=['PUT'])
+def wa_put_settings():
+    body = request.get_json(silent=True) or {}
+    send_time = str(body.get('sendTime', '10:00')).strip()
+    if not TIME_RE.match(send_time):
+        return jsonify({"message": "Send time must be HH:MM (24-hour), e.g. 10:00."}), 400
+    settings = {'enabled': bool(body.get('enabled')), 'groupName': str(body.get('groupName', '')).strip()[:100],
+                'sendTime': send_time}
+    if settings['enabled'] and not settings['groupName']:
+        return jsonify({"message": "Enter the WhatsApp group name before turning alerts on."}), 400
+    try:
+        _wa('wa_settings').update_one({'_id': 'settings'}, {'$set': settings}, upsert=True)
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify(settings)
+
+@app.route('/api/whatsapp/hods', methods=['PUT'])
+def wa_put_hod():
+    body = request.get_json(silent=True) or {}
+    dept = str(body.get('department', '')).strip()
+    name = str(body.get('name', '')).strip()[:120]
+    if not dept:
+        return jsonify({"message": "Department is required."}), 400
+    try:
+        phone = normalise_phone(body.get('phone'))
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    try:
+        if not name and not phone:
+            _wa('wa_hods').delete_one({'department': dept})
+        else:
+            _wa('wa_hods').update_one({'department': dept}, {'$set': {'department': dept, 'name': name, 'phone': phone}}, upsert=True)
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify({'department': dept, 'name': name, 'phone': phone})
+
+@app.route('/api/employees/<ticket>/phone', methods=['PUT'])
+def put_employee_phone(ticket):
+    body = request.get_json(silent=True) or {}
+    try:
+        phone = normalise_phone(body.get('phone'))
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+    try:
+        get_db()
+        result = _db['employee_master'].update_one({'ticket': str(ticket).strip()}, {'$set': {'phone': phone}})
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    if not result.matched_count:
+        return jsonify({"message": "Employee not found in the master list."}), 404
+    return jsonify({'ticket': ticket, 'phone': phone})
+
+def wa_daily_payload(date):
+    """Late arrivals and missing punches for one report date, grouped by department with HOD + phones."""
+    records_col, _ = get_db()
+    master = get_master()
+    hods = {h['department']: h for h in _wa('wa_hods').find({}, {'_id': 0})}
+    phones = {e['ticket']: e.get('phone', '') for e in _db['employee_master'].find({}, {'_id': 0, 'ticket': 1, 'phone': 1})}
+    by_dept = defaultdict(lambda: {'late': [], 'missing': []})
+    for r in records_col.find({'date': date}, {'_id': 0}):
+        dept = master.get(r.get('ticket'), {}).get('dept') or r.get('dept') or 'Unassigned'
+        apply_rules(r, dept)
+        person = {'ticket': r.get('ticket'), 'name': master.get(r.get('ticket'), {}).get('name') or r.get('name', ''),
+                  'phone': phones.get(r.get('ticket'), '')}
+        if (r.get('late_min') or 0) > 0:
+            by_dept[dept]['late'].append({**person, 'lateMinutes': r['late_min']})
+        if r.get('status') == 'INCOMPLETE':
+            by_dept[dept]['missing'].append(person)
+    departments = []
+    for dept in sorted(by_dept):
+        hod = hods.get(dept, {})
+        departments.append({'department': dept, 'hod': {'name': hod.get('name', ''), 'phone': hod.get('phone', '')},
+                            'late': sorted(by_dept[dept]['late'], key=lambda p: -p['lateMinutes']),
+                            'missing': sorted(by_dept[dept]['missing'], key=lambda p: p['name'])})
+    label = datetime.strptime(date, '%Y-%m-%d').strftime('%d %b %Y')
+    return {'date': date, 'dateLabel': label, 'departments': departments}
+
+@app.route('/api/whatsapp/pending', methods=['GET'])
+def wa_pending():
+    """For the bot: settings plus the newest imported report not yet sent (within the lookback window)."""
+    if not _bot_authorised():
+        return jsonify({"message": "Bot token missing or wrong."}), 401
+    try:
+        settings = _wa_settings()
+        sent = set(_wa('wa_sent').distinct('date'))
+        today = request.args.get('today') or datetime.utcnow().strftime('%Y-%m-%d')
+        oldest = (datetime.strptime(today, '%Y-%m-%d') - timedelta(days=WA_LOOKBACK_DAYS)).strftime('%Y-%m-%d')
+        candidates = sorted(d for d in report_dates() if oldest <= d <= today and d not in sent)
+        report = wa_daily_payload(candidates[-1]) if candidates else None
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
+    return jsonify({'settings': settings, 'report': report})
+
+@app.route('/api/whatsapp/sent', methods=['POST'])
+def wa_mark_sent():
+    if not _bot_authorised():
+        return jsonify({"message": "Bot token missing or wrong."}), 401
+    date = str((request.get_json(silent=True) or {}).get('date', ''))
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+        return jsonify({"message": "date must be YYYY-MM-DD"}), 400
+    _wa('wa_sent').update_one({'date': date}, {'$set': {'date': date, 'sentAt': datetime.utcnow()}}, upsert=True)
+    _wa('wa_settings').update_one({'_id': 'bot_status'}, {'$set': {'lastSentDate': date}}, upsert=True)
+    return jsonify({'date': date})
+
+@app.route('/api/whatsapp/heartbeat', methods=['POST'])
+def wa_heartbeat():
+    if not _bot_authorised():
+        return jsonify({"message": "Bot token missing or wrong."}), 401
+    body = request.get_json(silent=True) or {}
+    status = {'seenAt': datetime.utcnow(), 'state': str(body.get('state', ''))[:40],
+              'groupFound': body.get('groupFound'), 'lastError': (str(body['lastError'])[:300] if body.get('lastError') else None)}
+    _wa('wa_settings').update_one({'_id': 'bot_status'}, {'$set': status}, upsert=True)
+    return jsonify({'ok': True})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

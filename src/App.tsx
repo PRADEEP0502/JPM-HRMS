@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness, ChartNoAxesCombined, FileBarChart, Fingerprint,
   CalendarClock, CircleAlert, CircleCheck, UserPlus, KeyRound, Timer, FileSpreadsheet, SlidersHorizontal, Leaf, Printer,
 } from 'lucide-react';
+import { WhatsAppSettings } from './WhatsAppSettings';
 import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -969,6 +970,7 @@ function App() {
             shiftSuccess={shiftSuccess}
             employeeImportResult={employeeImportResult}
             onNotice={showNotice}
+            apiAuth={authHeader ?? ''}
           />}
         </div>
       </main>
@@ -1093,7 +1095,7 @@ function WorkspaceView({
   view, role, selectedDate, search, records, employees, allRecords, departmentAnalytics, apiAlerts, importHistory, liveData,
   onDateChange, onSearchChange, onExport, onExportExcel, onExportPdf, onImport,
   onRegisterEmployee, onImportEmployees, onEmployeeClick, onCreateShift, shiftForm, onShiftFormChange,
-  shiftError, shiftSuccess, employeeImportResult, onNotice,
+  shiftError, shiftSuccess, employeeImportResult, onNotice, apiAuth,
 }: {
   view: string;
   role: Role;
@@ -1122,6 +1124,7 @@ function WorkspaceView({
   shiftSuccess: string;
   employeeImportResult: string;
   onNotice: (message: string) => void;
+  apiAuth: string;
 }) {
   const [departmentFilter, setDepartmentFilter] = useState('All departments');
   const [statusFilter, setStatusFilter] = useState('All statuses');
@@ -1403,6 +1406,7 @@ function WorkspaceView({
       <section className="panel settings-card"><div className="settings-card-icon"><ShieldCheck size={18} /></div><h2>Access & permissions</h2><p>{liveData ? 'This session is authenticated and page permissions are based on the backend role.' : 'Demo role switching only changes the development interface; it does not grant production permissions.'}</p><div className="settings-status"><i /> {liveData ? `${role} · authenticated` : `${role} role preview`}</div><button className="button-secondary" onClick={() => onNotice('Production authentication and role authorization are enforced by the Spring Security API.')}>Security details</button></section>
       <section className="panel settings-card"><div className="settings-card-icon"><FileBarChart size={18} /></div><h2>Report imports</h2><p>Excel and text-based PDF reports are parsed by the API, validated against the employee master and retained in import history.</p><div className={`settings-status ${liveData ? '' : 'settings-unavailable'}`}><i /> {liveData ? 'Import history available to HR' : 'Sign in with an HR account to import'}</div><button className="button-secondary" onClick={onImport}>Open import dialog</button></section>
     </div>}
+    {view === 'Settings' && role === 'HR' && <WhatsAppSettings auth={apiAuth} employees={employees} />}
 
     <footer className="page-footer"><span>© {new Date().getFullYear()} JPM HRMS · Junior Processing Mills</span><span><span className="secure-dot" /> {liveData ? 'Authenticated API session' : demoMode ? 'Demo workspace' : 'No live source connected'}</span><button onClick={() => onNotice('Integration layer is ready for future authorized HRMS and eSSL connectivity.')}>Integration status <span className="footer-demo">{liveData ? 'Connected' : demoMode ? 'Demo mode' : 'Not connected'}</span></button></footer>
   </>;

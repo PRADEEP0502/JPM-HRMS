@@ -8,3 +8,5 @@ services:
     envVars:
       - key: MONGO_URI
         sync: false
+      - key: WA_BOT_TOKEN
+        sync: false

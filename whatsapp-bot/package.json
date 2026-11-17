@@ -1,0 +1,19 @@
+{
+  "name": "jpm-whatsapp-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Posts daily late arrivals and missing punches to a WhatsApp group, tagging HODs and employees.",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "preview": "node bot.js --preview"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.24",
+    "pino": "10.4.0",
+    "qrcode-terminal": "0.12.0"
+  }
+}

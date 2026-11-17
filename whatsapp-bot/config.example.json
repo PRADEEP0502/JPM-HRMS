@@ -1,0 +1,4 @@
+{
+  "apiUrl": "https://YOUR-APP.onrender.com",
+  "botToken": "same value as WA_BOT_TOKEN on the server"
+}
