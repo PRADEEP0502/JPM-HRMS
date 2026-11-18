@@ -1477,11 +1477,11 @@ function EmployeeTimeline({ employee, records, month, onClose }: {
   const earlyMinutes = records.reduce((sum, record) => sum + record.earlyMinutes, 0);
   const totalHours = records.reduce((sum, record) => sum + (record.hours || 0), 0);
   const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-  const stats: Array<{ key: DayFilter; label: string; value: string; note?: string; icon: typeof Users }> = [
+  const stats: Array<{ key: DayFilter; label: string; value: string; note?: string; sub?: string; icon: typeof Users }> = [
     { key: 'present', label: 'Present', value: `${presentDays}`, note: pluralDays(presentDays, 'day'), icon: CircleCheck },
     { key: 'absent', label: 'Absent', value: `${count('absent')}`, note: pluralDays(count('absent'), 'day'), icon: CircleAlert },
-    { key: 'late', label: 'Late', value: lateMinutes ? formatMinutes(lateMinutes) : '0m', note: `on ${pluralDays(count('late'), 'day')}`, icon: Clock3 },
-    { key: 'early', label: 'Early out', value: earlyMinutes ? formatMinutes(earlyMinutes) : '0m', note: `on ${pluralDays(count('early'), 'day')}`, icon: LogOut },
+    { key: 'late', label: 'Late', value: lateMinutes ? formatMinutes(lateMinutes) : '0m', note: `on ${pluralDays(count('late'), 'day')}`, sub: count('late') ? `avg ${formatMinutes(Math.round(lateMinutes / count('late')))} a day` : undefined, icon: Clock3 },
+    { key: 'early', label: 'Early out', value: earlyMinutes ? formatMinutes(earlyMinutes) : '0m', note: `on ${pluralDays(count('early'), 'day')}`, sub: count('early') ? `avg ${formatMinutes(Math.round(earlyMinutes / count('early')))} a day` : undefined, icon: LogOut },
     { key: 'short', label: 'Short of 12h', value: `${count('short')}`, note: pluralDays(count('short'), 'day'), icon: Timer },
     { key: 'missing', label: 'Missing punch', value: `${count('missing')}`, note: pluralDays(count('missing'), 'day'), icon: Fingerprint },
     { key: 'all', label: 'Total hours', value: `${totalHours.toFixed(1)}h`, note: presentDays ? `avg ${(totalHours / presentDays).toFixed(1)}h a day` : undefined, icon: Activity },
@@ -1496,7 +1496,7 @@ function EmployeeTimeline({ employee, records, month, onClose }: {
       <p className="timeline-range">{monthLabel} summary · {pluralDays(records.length, 'day')} recorded</p>
       {!records.length ? <div className="workspace-empty"><strong>No records this month</strong><p>No attendance is available for {employee.name} in {monthLabel}.</p></div> : <>
         <div className="timeline-stats">
-          {stats.map((stat) => <button type="button" className={`timeline-stat ${filter === stat.key ? 'active' : ''}`} key={stat.label} onClick={() => toggle(stat.key)} aria-pressed={filter === stat.key}><span className="timeline-stat-label"><i className="timeline-stat-icon"><stat.icon size={15} /></i>{stat.label}</span><strong>{stat.value}</strong>{stat.note && <small>{stat.note}</small>}</button>)}
+          {stats.map((stat) => <button type="button" className={`timeline-stat ${filter === stat.key ? 'active' : ''}`} key={stat.label} onClick={() => toggle(stat.key)} aria-pressed={filter === stat.key}><span className="timeline-stat-label"><i className="timeline-stat-icon"><stat.icon size={15} /></i>{stat.label}</span><strong>{stat.value}</strong>{stat.note && <small>{stat.note}</small>}{stat.sub && <small>{stat.sub}</small>}</button>)}
         </div>
         <p className="timeline-hint no-print">Tap a card to see those days.</p>
       </>}
