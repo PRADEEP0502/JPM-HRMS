@@ -62,38 +62,43 @@ const SENT_FILE = path.join(__dirname, 'sent.json');
 const readSent = () => { try { return JSON.parse(fs.readFileSync(SENT_FILE, 'utf8')); } catch { return []; } };
 const writeSent = (dates) => fs.writeFileSync(SENT_FILE, JSON.stringify(dates.slice(-60)));
 
-/** Build the group message text and the list of JIDs to tag. */
+const DIVIDER = '━━━━━━━━━━━━━━━━';
+const minutesText = (min) => (min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m` : `${min} min`);
+
+/** Build the group message text and the list of JIDs to tag. Names come first so they line up; tags go at the end. */
 function buildMessage(report) {
   const mentions = new Set();
   const tag = (person) => {
-    if (person.phone) {
-      mentions.add(jidOf(person.phone));
-      return `@${person.phone}`;
-    }
-    return '';
+    if (!person.phone) return '';
+    mentions.add(jidOf(person.phone));
+    return ` @${person.phone}`;
   };
-  const lines = [`*JPM Attendance · ${report.dateLabel}*`, 'Late arrivals and missing punches', ''];
+  const day = new Date(`${report.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long' });
   const departments = report.departments.filter((d) => d.late.length || d.missing.length);
+  const totalLate = departments.reduce((n, d) => n + d.late.length, 0);
+  const totalMissing = departments.reduce((n, d) => n + d.missing.length, 0);
+
+  const lines = ['📋 *JPM ATTENDANCE REPORT*', `📅 ${report.dateLabel} (${day})`, ''];
   if (!departments.length) {
     lines.push('✅ Everyone was on time and every punch is complete.');
     return { text: lines.join('\n'), mentions: [] };
   }
+  lines.push(`⏰ Late: *${totalLate}*`, `⚠️ Missing punch: *${totalMissing}*`);
+
   for (const dept of departments) {
-    const hodTag = dept.hod.phone ? tag(dept.hod) : '';
-    const hodText = hodTag ? `HOD ${hodTag}` : dept.hod.name ? `HOD ${dept.hod.name}` : 'HOD not set';
-    lines.push(`*${dept.department}* · ${hodText}`);
+    lines.push('', DIVIDER, `🏢 *${dept.department.toUpperCase()}*`);
+    if (dept.hod.name || dept.hod.phone) lines.push(`👤 HOD: ${dept.hod.name || ''}${tag(dept.hod)}`.replace(/HOD: {2}@/, 'HOD: @'));
     if (dept.late.length) {
-      lines.push(`⏰ Late (${dept.late.length})`);
-      for (const p of dept.late) lines.push(`• ${[tag(p), p.name].filter(Boolean).join(' ')} (${p.ticket}) · ${p.lateMinutes} min late`);
+      lines.push('', `⏰ *Late (${dept.late.length})*`);
+      dept.late.forEach((p, i) => lines.push(`${i + 1}. ${p.name} – ${minutesText(p.lateMinutes)}${tag(p)}`));
     }
     if (dept.missing.length) {
-      lines.push(`⚠️ Missing punch (${dept.missing.length})`);
-      for (const p of dept.missing) lines.push(`• ${[tag(p), p.name].filter(Boolean).join(' ')} (${p.ticket})`);
+      lines.push('', `⚠️ *Missing punch (${dept.missing.length})*`);
+      dept.missing.forEach((p, i) => lines.push(`${i + 1}. ${p.name}${tag(p)}`));
     }
-    lines.push('');
   }
-  lines.push('_Sent automatically by JPM HRMS_');
-  return { text: lines.join('\n').trim(), mentions: [...mentions] };
+  lines.push('', DIVIDER, '_Auto message · JPM HRMS_');
+  return { text: lines.join('\n'), mentions: [...mentions] };
 }
 
 async function findGroup(name) {
