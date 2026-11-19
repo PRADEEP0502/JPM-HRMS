@@ -932,8 +932,13 @@ def wa_pending():
         sent = set(_wa('wa_sent').distinct('date'))
         today = request.args.get('today') or datetime.utcnow().strftime('%Y-%m-%d')
         oldest = (datetime.strptime(today, '%Y-%m-%d') - timedelta(days=WA_LOOKBACK_DAYS)).strftime('%Y-%m-%d')
-        candidates = sorted(d for d in report_dates() if oldest <= d <= today and d not in sent)
-        report = wa_daily_payload(candidates[-1]) if candidates else None
+        # A "Send again" request from Settings goes first and ignores the send time.
+        resend = _wa('wa_settings').find_one({'_id': 'resend'}) or {}
+        if resend.get('date') and resend['date'] not in sent:
+            report = {**wa_daily_payload(resend['date']), 'sendKey': resend.get('key') or resend['date'], 'resend': True}
+        else:
+            candidates = sorted(d for d in report_dates() if oldest <= d <= today and d not in sent)
+            report = {**wa_daily_payload(candidates[-1]), 'sendKey': candidates[-1]} if candidates else None
     except Exception as e:
         return jsonify({"message": f"DB error: {e}"}), 500
     return jsonify({'settings': settings, 'report': report})
@@ -947,6 +952,24 @@ def wa_mark_sent():
         return jsonify({"message": "date must be YYYY-MM-DD"}), 400
     _wa('wa_sent').update_one({'date': date}, {'$set': {'date': date, 'sentAt': datetime.utcnow()}}, upsert=True)
     _wa('wa_settings').update_one({'_id': 'bot_status'}, {'$set': {'lastSentDate': date}}, upsert=True)
+    _wa('wa_settings').delete_one({'_id': 'resend', 'date': date})
+    return jsonify({'date': date})
+
+@app.route('/api/whatsapp/resend', methods=['POST'])
+def wa_resend():
+    """Settings 'Send again': post a report to the group once more (default: the last one sent)."""
+    try:
+        status = _wa('wa_settings').find_one({'_id': 'bot_status'}) or {}
+        date = str((request.get_json(silent=True) or {}).get('date') or status.get('lastSentDate') or '')
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+            return jsonify({"message": "No report has been sent yet, so there is nothing to send again."}), 400
+        if date not in report_dates():
+            return jsonify({"message": f"No imported report for {date}."}), 404
+        key = f"{date}#resend-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        _wa('wa_sent').delete_one({'date': date})
+        _wa('wa_settings').update_one({'_id': 'resend'}, {'$set': {'date': date, 'key': key}}, upsert=True)
+    except Exception as e:
+        return jsonify({"message": f"DB error: {e}"}), 500
     return jsonify({'date': date})
 
 @app.route('/api/whatsapp/heartbeat', methods=['POST'])

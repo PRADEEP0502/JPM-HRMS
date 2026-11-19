@@ -126,13 +126,15 @@ async function tick() {
       lastError = `Group "${settings.groupName}" not found. Is this WhatsApp number a member?`;
       return;
     }
-    if (!settings.enabled || !report || !group || localTime() < settings.sendTime) return;
+    if (!settings.enabled || !report || !group) return;
+    if (!report.resend && localTime() < settings.sendTime) return; // "Send again" goes out straight away
+    const key = report.sendKey || report.date;
     const sent = readSent();
-    if (!sent.includes(report.date)) {
+    if (!sent.includes(key)) {
       const { text, mentions } = buildMessage(report);
       await sock.sendMessage(group.id, { text, mentions });
-      writeSent([...sent, report.date]);
-      log(`Sent ${report.dateLabel} report to "${group.subject}" (${mentions.length} tagged).`);
+      writeSent([...sent, key]);
+      log(`${report.resend ? 'Re-sent' : 'Sent'} ${report.dateLabel} report to "${group.subject}" (${mentions.length} tagged).`);
     }
     // Tell the server (retried on the next tick if the server is asleep; the local file prevents a resend)
     await api('/api/whatsapp/sent', { method: 'POST', body: JSON.stringify({ date: report.date }) });

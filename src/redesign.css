@@ -367,3 +367,4 @@ button.timeline-stat.active .timeline-stat-icon { background: var(--green); colo
 .wa-id { display: block; color: var(--muted); font-size: 11.5px; }
 .wa-search { max-width: 360px; margin-bottom: 10px; }
 .wa-phone-list { max-height: 460px; overflow: auto; }
+.wa-bot-status .wa-resend { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; }

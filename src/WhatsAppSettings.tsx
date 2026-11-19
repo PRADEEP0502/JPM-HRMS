@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MessageCircle, RefreshCw, Search } from 'lucide-react';
+import { MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
 import { apiRequest } from './api';
 import type { Employee } from './data';
 
@@ -70,6 +70,9 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
   };
 
   const saveSettings = () => run('settings', () => apiRequest('/api/whatsapp/settings', auth, { method: 'PUT', body: JSON.stringify(form) }), 'WhatsApp alert settings saved.');
+  const sendAgain = () => run('resend', async () => {
+    await apiRequest('/api/whatsapp/resend', auth, { method: 'POST', body: '{}' });
+  }, 'Sending again. The bot posts it to the group within a minute.');
   const saveHod = (department: string) => run(`hod-${department}`, async () => {
     const saved = await apiRequest<{ name: string; phone: string }>('/api/whatsapp/hods', auth, { method: 'PUT', body: JSON.stringify({ department, ...hodDrafts[department] }) });
     setHodDrafts((current) => ({ ...current, [department]: { name: saved.name, phone: saved.phone ? displayPhone(saved.phone) : '' } }));
@@ -108,6 +111,7 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
           </span>
           {bot?.lastError && <span className="wa-bot-error">{bot.lastError}</span>}
         </div>
+        {bot?.lastSentDate && <button className="button-secondary wa-resend" disabled={saving === 'resend' || !form.enabled} title={form.enabled ? 'Post the last report to the group again, with the current tags' : 'Turn on Send daily alerts first'} onClick={() => void sendAgain()}><Send size={14} /> {saving === 'resend' ? 'Sending…' : 'Send again'}</button>}
       </div>
 
       <div className="wa-settings-row">
