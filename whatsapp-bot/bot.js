@@ -90,11 +90,11 @@ function buildMessage(report) {
     if (dept.hod.name || dept.hod.phone) lines.push(`👤 HOD: ${dept.hod.name || ''}${tag(dept.hod)}`.replace(/HOD: {2}@/, 'HOD: @'));
     if (dept.late.length) {
       lines.push('', `⏰ *Late (${dept.late.length})*`);
-      dept.late.forEach((p, i) => lines.push(`${i + 1}. ${p.name} – ${minutesText(p.lateMinutes)}${tag(p)}`));
+      dept.late.forEach((p, i) => lines.push(`${i + 1}. ${p.name} (${p.ticket}) – ${minutesText(p.lateMinutes)}${tag(p)}`));
     }
     if (dept.missing.length) {
       lines.push('', `⚠️ *Missing punch (${dept.missing.length})*`);
-      dept.missing.forEach((p, i) => lines.push(`${i + 1}. ${p.name}${tag(p)}`));
+      dept.missing.forEach((p, i) => lines.push(`${i + 1}. ${p.name} (${p.ticket})${tag(p)}`));
     }
   }
   lines.push('', DIVIDER, '_Auto message · JPM HRMS_');
