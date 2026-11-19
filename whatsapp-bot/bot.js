@@ -8,6 +8,17 @@
 //   npm start            (keep running)
 //   npm run preview      (print the next message without sending it)
 
+// The WhatsApp encryption library (libsignal) prints harmless session noise straight to the console
+// ("Closing session", "Bad MAC", ...) after a restart. Hide it so the bot window stays readable.
+const SIGNAL_NOISE = /^(Closing (open |stale open )?session|Opening session|Failed to decrypt message|Session error|Removing old closed session|Migrating session|Decrypted message with closed session|Session already (closed|open))/;
+for (const level of ['log', 'info', 'warn', 'error']) {
+  const original = console[level].bind(console);
+  console[level] = (...args) => {
+    if (typeof args[0] === 'string' && SIGNAL_NOISE.test(args[0])) return;
+    original(...args);
+  };
+}
+
 const fs = require('fs');
 const path = require('path');
 const pino = require('pino');
