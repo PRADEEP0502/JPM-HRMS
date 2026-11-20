@@ -142,6 +142,7 @@ async function tick() {
       lastError = `Group "${settings.groupName}" not found. Is this WhatsApp number a member?`;
       return;
     }
+    lastError = null; // clear an old "group not found" as soon as the group is found
     if (!settings.enabled || !report || !group) return;
     if (!report.resend && localTime() < settings.sendTime) return; // "Send again" goes out straight away
     const key = report.sendKey || report.date;
