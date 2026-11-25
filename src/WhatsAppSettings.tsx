@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
+import { ArrowDown, ArrowUp, MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
 import { apiRequest } from './api';
 import type { Employee } from './data';
 
-type WaSettings = { enabled: boolean; groupName: string; sendTime: string };
+type WaSettings = { enabled: boolean; groupName: string; sendTime: string; departmentOrder: string[] };
 type WaBot = { online: boolean; state: string; groupFound: boolean | null; lastSentDate: string | null; lastError: string | null; seenAt: string | null };
 type WaResponse = {
   settings: WaSettings;
@@ -32,19 +32,21 @@ const displayPhone = (phone: string) => {
 export function WhatsAppSettings({ auth, employees }: { auth: string; employees: Employee[] }) {
   const [data, setData] = useState<WaResponse | null>(null);
   const [loadError, setLoadError] = useState('');
-  const [form, setForm] = useState<WaSettings>({ enabled: false, groupName: '', sendTime: '10:00' });
+  const [form, setForm] = useState<WaSettings>({ enabled: false, groupName: '', sendTime: '10:00', departmentOrder: [] });
   const [hodDrafts, setHodDrafts] = useState<Record<string, { name: string; phone: string }>>({});
   const [phoneDrafts, setPhoneDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [saving, setSaving] = useState('');
   const [query, setQuery] = useState('');
+  const [orderChanged, setOrderChanged] = useState(false);
 
   const load = async () => {
     setLoadError('');
     try {
       const response = await apiRequest<WaResponse>('/api/whatsapp/settings', auth);
       setData(response);
-      setForm(response.settings);
+      setForm({ ...response.settings, departmentOrder: response.settings.departmentOrder ?? [] });
+      setOrderChanged(false);
       setHodDrafts(Object.fromEntries(response.departments.map((dept) => [dept, {
         name: response.hods[dept]?.name ?? '',
         phone: response.hods[dept]?.phone ? displayPhone(response.hods[dept].phone) : '',
@@ -69,7 +71,28 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
     }
   };
 
-  const saveSettings = () => run('settings', () => apiRequest('/api/whatsapp/settings', auth, { method: 'PUT', body: JSON.stringify(form) }), 'WhatsApp alert settings saved.');
+  // Departments in message order: HR's saved order first, any others after it (Office first, then A–Z).
+  const orderedDepartments = useMemo(() => {
+    const all = data?.departments ?? [];
+    const chosen = form.departmentOrder.filter((dept) => all.includes(dept));
+    const isOffice = (dept: string) => dept.trim().toLowerCase() === 'office';
+    const rest = all.filter((dept) => !chosen.includes(dept))
+      .sort((a, b) => Number(isOffice(b)) - Number(isOffice(a)) || a.localeCompare(b));
+    return [...chosen, ...rest];
+  }, [data, form.departmentOrder]);
+  const moveDepartment = (index: number, step: -1 | 1) => {
+    const next = [...orderedDepartments];
+    const target = index + step;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    setForm({ ...form, departmentOrder: next });
+    setOrderChanged(true);
+  };
+
+  const saveSettings = (key = 'settings', success = 'WhatsApp alert settings saved.') => run(key, async () => {
+    await apiRequest('/api/whatsapp/settings', auth, { method: 'PUT', body: JSON.stringify({ ...form, departmentOrder: orderedDepartments }) });
+    setOrderChanged(false);
+  }, success);
   const sendAgain = () => run('resend', async () => {
     await apiRequest('/api/whatsapp/resend', auth, { method: 'POST', body: '{}' });
   }, 'Sending again. The bot posts it to the group within a minute.');
@@ -95,7 +118,7 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
 
   return <section className="panel workspace-panel wa-panel">
     <div className="workspace-panel-heading">
-      <div className="wa-title"><div className="settings-card-icon"><MessageCircle size={18} /></div><div><h2>WhatsApp alerts</h2><p>Every day at the send time, the latest report’s late arrivals and missing punches go to the WhatsApp group, tagging each department’s HOD and the employee.</p></div></div>
+      <div className="wa-title"><div className="settings-card-icon"><MessageCircle size={18} /></div><div><h2>WhatsApp alerts</h2><p>Every day at the send time, the latest report’s present, absent, late arrivals, early departures and missing punches go to the WhatsApp group, department by department, tagging each department’s HOD and the employee.</p></div></div>
       <button className="button-tertiary" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button>
     </div>
 
@@ -122,9 +145,17 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
       </div>
       {message && <p className={message.error ? 'form-error' : 'form-success'}>{message.text}</p>}
 
-      <h3 className="wa-subheading">Department HODs <small>tagged on their department’s lines</small></h3>
-      <div className="table-scroll"><table className="wa-table"><thead><tr><th>DEPARTMENT</th><th>HOD NAME</th><th>MOBILE</th><th /></tr></thead><tbody>
-        {data.departments.map((dept) => <tr key={dept}>
+      <div className="wa-subheading-row">
+        <h3 className="wa-subheading">Departments &amp; HODs <small>use ↑ ↓ to choose which department comes first in the message · HOD is tagged on their department’s lines</small></h3>
+        {orderChanged && <button className="button-primary" disabled={saving === 'order'} onClick={() => void saveSettings('order', 'Department order saved.')}>{saving === 'order' ? 'Saving…' : 'Save order'}</button>}
+      </div>
+      <div className="table-scroll"><table className="wa-table"><thead><tr><th>ORDER</th><th>DEPARTMENT</th><th>HOD NAME</th><th>MOBILE</th><th /></tr></thead><tbody>
+        {orderedDepartments.map((dept, index) => <tr key={dept}>
+          <td className="wa-order">
+            <span>{index + 1}</span>
+            <button className="button-tertiary" title="Move up" aria-label={`Move ${dept} up`} disabled={index === 0} onClick={() => moveDepartment(index, -1)}><ArrowUp size={14} /></button>
+            <button className="button-tertiary" title="Move down" aria-label={`Move ${dept} down`} disabled={index === orderedDepartments.length - 1} onClick={() => moveDepartment(index, 1)}><ArrowDown size={14} /></button>
+          </td>
           <td>{dept}</td>
           <td><input value={hodDrafts[dept]?.name ?? ''} placeholder="HOD name" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...hodDrafts[dept], name: event.target.value } })} /></td>
           <td><input inputMode="tel" value={hodDrafts[dept]?.phone ?? ''} placeholder="98765 43210" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...hodDrafts[dept], phone: event.target.value } })} /></td>

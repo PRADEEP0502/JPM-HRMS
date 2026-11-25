@@ -792,11 +792,12 @@ def reset():
         return jsonify({"error": str(e)}), 500
 
 # ── WHATSAPP ALERTS ──────────────────────────────────────────────────────
-# A small bot on an office PC (see whatsapp-bot/) posts the latest report's late arrivals and
-# missing punches to a WhatsApp group once a day, tagging each department's HOD and the employee.
+# A small bot on an office PC (see whatsapp-bot/) posts the latest report's present / absent / late /
+# early-departure / missing-punch summary to a WhatsApp group once a day, department by department in
+# the order HR sets, tagging each department's HOD and the employee.
 # HR keeps phone numbers, HODs, the group name and the send time here from the Settings page.
 # The bot's feed contains phone numbers, so it requires the WA_BOT_TOKEN shared secret.
-WA_DEFAULTS = {'enabled': False, 'groupName': '', 'sendTime': '10:00'}
+WA_DEFAULTS = {'enabled': False, 'groupName': '', 'sendTime': '10:00', 'departmentOrder': []}
 WA_LOOKBACK_DAYS = 3          # never send reports older than this (avoids a backlog after downtime)
 WA_ONLINE_SECONDS = 180       # bot counts as online if it checked in within this window
 TIME_RE = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
@@ -851,8 +852,13 @@ def wa_put_settings():
     send_time = str(body.get('sendTime', '10:00')).strip()
     if not TIME_RE.match(send_time):
         return jsonify({"message": "Send time must be HH:MM (24-hour), e.g. 10:00."}), 400
+    order = []
+    for dept in body.get('departmentOrder') or []:
+        dept = str(dept).strip()[:100]
+        if dept and dept not in order:
+            order.append(dept)
     settings = {'enabled': bool(body.get('enabled')), 'groupName': str(body.get('groupName', '')).strip()[:100],
-                'sendTime': send_time}
+                'sendTime': send_time, 'departmentOrder': order[:300]}
     if settings['enabled'] and not settings['groupName']:
         return jsonify({"message": "Enter the WhatsApp group name before turning alerts on."}), 400
     try:
@@ -898,27 +904,39 @@ def put_employee_phone(ticket):
     return jsonify({'ticket': ticket, 'phone': phone})
 
 def wa_daily_payload(date):
-    """Late arrivals and missing punches for one report date, grouped by department with HOD + phones."""
+    """Present count plus absent, late, early-departure and missing-punch lists for one report date,
+    grouped by department (in the order HR chose in Settings) with HOD + phones."""
     records_col, _ = get_db()
     master = get_master()
     hods = {h['department']: h for h in _wa('wa_hods').find({}, {'_id': 0})}
     phones = {e['ticket']: e.get('phone', '') for e in _db['employee_master'].find({}, {'_id': 0, 'ticket': 1, 'phone': 1})}
-    by_dept = defaultdict(lambda: {'late': [], 'missing': []})
+    by_dept = defaultdict(lambda: {'present': set(), 'absent': [], 'late': [], 'early': [], 'missing': []})
     for r in records_col.find({'date': date}, {'_id': 0}):
         dept = master.get(r.get('ticket'), {}).get('dept') or r.get('dept') or 'Unassigned'
         apply_rules(r, dept)
         person = {'ticket': r.get('ticket'), 'name': master.get(r.get('ticket'), {}).get('name') or r.get('name', ''),
                   'phone': phones.get(r.get('ticket'), '')}
+        by_dept[dept]['present'].add(r.get('ticket'))
         if (r.get('late_min') or 0) > 0:
             by_dept[dept]['late'].append({**person, 'lateMinutes': r['late_min']})
+        if (r.get('early_min') or 0) > 0:
+            by_dept[dept]['early'].append({**person, 'earlyMinutes': r['early_min']})
         if r.get('status') == 'INCOMPLETE':
             by_dept[dept]['missing'].append(person)
+    for a in absent_records([date]):
+        by_dept[a['dept']]['absent'].append({'ticket': a['ticket'], 'name': a['name'], 'phone': phones.get(a['ticket'], '')})
+    order = {d: i for i, d in enumerate(_wa_settings().get('departmentOrder') or [])}
     departments = []
-    for dept in sorted(by_dept):
+    # HR's saved order first; departments not in it follow with Office first, then A–Z
+    for dept in sorted(by_dept, key=lambda d: (order.get(d, len(order)), not is_office(d), d.lower())):
         hod = hods.get(dept, {})
+        d = by_dept[dept]
         departments.append({'department': dept, 'hod': {'name': hod.get('name', ''), 'phone': hod.get('phone', '')},
-                            'late': sorted(by_dept[dept]['late'], key=lambda p: -p['lateMinutes']),
-                            'missing': sorted(by_dept[dept]['missing'], key=lambda p: p['name'])})
+                            'present': len(d['present']),
+                            'absent': sorted(d['absent'], key=lambda p: p['name']),
+                            'late': sorted(d['late'], key=lambda p: -p['lateMinutes']),
+                            'early': sorted(d['early'], key=lambda p: -p['earlyMinutes']),
+                            'missing': sorted(d['missing'], key=lambda p: p['name'])})
     label = datetime.strptime(date, '%Y-%m-%d').strftime('%d %b %Y')
     return {'date': date, 'dateLabel': label, 'departments': departments}
 

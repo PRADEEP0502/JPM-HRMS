@@ -1,6 +1,7 @@
 // JPM HRMS WhatsApp bot.
 // Runs on an always-on office PC. Once a day, at the send time HR sets in the app, it posts the newest
-// imported attendance report's late arrivals and missing punches to a WhatsApp group, tagging each
+// imported attendance report's present / absent / late / early-departure / missing-punch summary to a
+// WhatsApp group, department by department in the order HR sets, tagging each
 // department's HOD and the employee. First run: scan the QR code with the WhatsApp account that is a
 // member of the group (WhatsApp > Linked devices > Link a device).
 //
@@ -85,27 +86,36 @@ function buildMessage(report) {
     return ` @${person.phone}`;
   };
   const day = new Date(`${report.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long' });
-  const departments = report.departments.filter((d) => d.late.length || d.missing.length);
-  const totalLate = departments.reduce((n, d) => n + d.late.length, 0);
-  const totalMissing = departments.reduce((n, d) => n + d.missing.length, 0);
+  // Departments arrive in the order HR chose in Settings.
+  const departments = report.departments.map((d) => ({
+    ...d, present: d.present || 0, absent: d.absent || [], early: d.early || [],
+  }));
+  const total = (pick) => departments.reduce((n, d) => n + pick(d), 0);
+  const listFor = (title, people, detail = () => '') => {
+    if (!people.length) return;
+    lines.push('', `${title} (${people.length})*`);
+    people.forEach((p, i) => lines.push(`${i + 1}. ${p.name} (${p.ticket})${detail(p)}${tag(p)}`));
+  };
 
   const lines = ['📋 *JPM ATTENDANCE REPORT*', `📅 ${report.dateLabel} (${day})`, ''];
-  if (!departments.length) {
-    lines.push('✅ Everyone was on time and every punch is complete.');
-    return { text: lines.join('\n'), mentions: [] };
-  }
-  lines.push(`⏰ Late: *${totalLate}*`, `⚠️ Missing punch: *${totalMissing}*`);
+  lines.push(
+    `✅ Present: *${total((d) => d.present)}*`,
+    `❌ Absent: *${total((d) => d.absent.length)}*`,
+    `⏰ Late arrivals: *${total((d) => d.late.length)}*`,
+    `🏃 Early departures: *${total((d) => d.early.length)}*`,
+    `⚠️ Missing punches: *${total((d) => d.missing.length)}*`,
+  );
 
   for (const dept of departments) {
     lines.push('', DIVIDER, `🏢 *${dept.department.toUpperCase()}*`);
     if (dept.hod.name || dept.hod.phone) lines.push(`👤 HOD: ${dept.hod.name || ''}${tag(dept.hod)}`.replace(/HOD: {2}@/, 'HOD: @'));
-    if (dept.late.length) {
-      lines.push('', `⏰ *Late (${dept.late.length})*`);
-      dept.late.forEach((p, i) => lines.push(`${i + 1}. ${p.name} (${p.ticket}) – ${minutesText(p.lateMinutes)}${tag(p)}`));
-    }
-    if (dept.missing.length) {
-      lines.push('', `⚠️ *Missing punch (${dept.missing.length})*`);
-      dept.missing.forEach((p, i) => lines.push(`${i + 1}. ${p.name} (${p.ticket})${tag(p)}`));
+    lines.push(`✅ Present: ${dept.present} · ❌ Absent: ${dept.absent.length}`);
+    listFor('❌ *Absent', dept.absent);
+    listFor('⏰ *Late arrivals', dept.late, (p) => ` – ${minutesText(p.lateMinutes)}`);
+    listFor('🏃 *Early departures', dept.early, (p) => ` – ${minutesText(p.earlyMinutes)} early`);
+    listFor('⚠️ *Missing punches', dept.missing);
+    if (!dept.absent.length && !dept.late.length && !dept.early.length && !dept.missing.length) {
+      lines.push('👍 All present, on time, punches complete.');
     }
   }
   lines.push('', DIVIDER, '_Auto message · JPM HRMS_');
