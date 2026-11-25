@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, MessageCircle, RefreshCw, Search, Send, Users } from 'lucide-react';
 import { apiRequest } from './api';
 import type { Employee } from './data';
 
@@ -117,47 +117,64 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
   const withPhone = data ? employees.filter((employee) => data.phones[employee.id]).length : 0;
   const bot = data?.bot;
 
+  const connected = Boolean(bot?.online && bot.state === 'connected');
+  const lastSent = bot?.lastSentDate ? new Date(`${bot.lastSentDate}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
+  const hodCount = orderedDepartments.filter((dept) => data?.hods[dept]?.phone).length;
+
   return <section className="panel workspace-panel wa-panel">
-    <div className="workspace-panel-heading">
-      <div className="wa-title"><div className="settings-card-icon"><MessageCircle size={18} /></div><div><h2>WhatsApp alerts</h2><p>Every day at the send time, the latest report’s present, absent, late arrivals, early departures and missing punches go to the WhatsApp group, department by department, tagging each department’s HOD and the employee.</p></div></div>
-      <button className="button-tertiary" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button>
-    </div>
+    <header className="wa-hero">
+      <div className="wa-hero-icon"><MessageCircle size={22} /></div>
+      <div className="wa-hero-copy">
+        <h2>WhatsApp alerts</h2>
+        <p>A daily attendance summary posted to your WhatsApp group, department by department, tagging each HOD and employee.</p>
+        <div className="wa-hero-tags">
+          <span className="t-present">Present</span><span className="t-absent">Absent</span><span className="t-late">Late arrivals</span><span className="t-early">Early departures</span><span className="t-missing">Missing punches</span>
+        </div>
+      </div>
+      <button className="button-tertiary wa-refresh" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button>
+    </header>
 
     {loadError ? <p className="form-error">{loadError}</p> : !data ? <p className="form-hint">Loading WhatsApp settings…</p> : <>
-      <div className={`wa-bot-status ${bot?.online && bot.state === 'connected' ? 'ok' : 'warn'}`}>
-        <i />
-        <div>
-          <strong>{botLabel[bot?.state ?? 'offline'] ?? `Bot: ${bot?.state}`}</strong>
-          <span>
-            {bot?.lastSentDate ? `Last sent: report of ${new Date(`${bot.lastSentDate}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : 'Nothing sent yet'}
-            {bot?.groupFound === false ? ' · group not found' : ''}
-            {!data.tokenConfigured ? ' · WA_BOT_TOKEN is not set on the server' : ''}
-          </span>
-          {bot?.lastError && <span className="wa-bot-error">{bot.lastError}</span>}
+      <div className={`wa-status ${connected ? 'ok' : 'warn'}`}>
+        <div className="wa-status-item wa-status-main">
+          <i className="wa-pulse" />
+          <div><small>Bot status</small><strong>{botLabel[bot?.state ?? 'offline'] ?? `Bot: ${bot?.state}`}</strong></div>
         </div>
+        <div className="wa-status-item"><div><small>Last sent</small><strong>{lastSent ? `Report of ${lastSent}` : 'Nothing sent yet'}</strong></div></div>
+        <div className="wa-status-item"><div><small>Group</small><strong>{form.groupName || 'Not set'}{bot?.groupFound === false ? ' · not found' : ''}</strong></div></div>
         {bot?.lastSentDate && <button className="button-secondary wa-resend" disabled={saving === 'resend' || !form.enabled} title={form.enabled ? 'Post the last report to the group again, with the current tags' : 'Turn on Send daily alerts first'} onClick={() => void sendAgain()}><Send size={14} /> {saving === 'resend' ? 'Sending…' : 'Send again'}</button>}
+        {(bot?.lastError || !data.tokenConfigured) && <p className="wa-status-error">{bot?.lastError || 'WA_BOT_TOKEN is not set on the server.'}</p>}
       </div>
 
-      <div className="wa-settings-row">
-        <label className="wa-switch"><input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} /><span>Send daily alerts</span></label>
-        <label>WhatsApp group name<input value={form.groupName} maxLength={100} placeholder="Exact group name, e.g. JPM Attendance" onChange={(event) => setForm({ ...form, groupName: event.target.value })} /></label>
-        <label>Send time<input type="time" value={form.sendTime} onChange={(event) => setForm({ ...form, sendTime: event.target.value })} /></label>
-        <button className="button-primary" disabled={saving === 'settings'} onClick={() => void saveSettings()}>{saving === 'settings' ? 'Saving…' : 'Save'}</button>
+      <div className="wa-card">
+        <div className="wa-card-head"><div><h3>Delivery</h3><p>Where and when the daily summary is posted.</p></div></div>
+        <div className="wa-delivery">
+          <label className={`wa-toggle ${form.enabled ? 'on' : ''}`}>
+            <input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />
+            <span className="wa-toggle-track"><span /></span>
+            <span className="wa-toggle-text"><strong>Daily alerts</strong><small>{form.enabled ? 'On' : 'Off'}</small></span>
+          </label>
+          <label className="wa-field wa-field-wide">WhatsApp group name<span className="wa-input-icon"><Users size={15} /><input value={form.groupName} maxLength={100} placeholder="Exact group name, e.g. JPM Attendance" onChange={(event) => setForm({ ...form, groupName: event.target.value })} /></span></label>
+          <label className="wa-field">Send time<span className="wa-input-icon"><Clock size={15} /><input type="time" value={form.sendTime} onChange={(event) => setForm({ ...form, sendTime: event.target.value })} /></span></label>
+          <button className="button-primary wa-save" disabled={saving === 'settings'} onClick={() => void saveSettings()}>{saving === 'settings' ? 'Saving…' : 'Save'}</button>
+        </div>
+        {message && <p className={`wa-message ${message.error ? 'form-error' : 'form-success'}`}>{message.text}</p>}
       </div>
-      {message && <p className={message.error ? 'form-error' : 'form-success'}>{message.text}</p>}
 
-      <div className="wa-section">
-        <div className="wa-section-head">
+      <div className="wa-card">
+        <div className="wa-card-head">
           <div>
-            <h3>Department order &amp; HODs</h3>
-            <p>Use the arrows to choose which department comes first in the WhatsApp message. The HOD is tagged under their department.</p>
+            <h3>Department order &amp; HODs <span className="wa-count">{orderedDepartments.length} departments · {hodCount} HODs</span></h3>
+            <p>Use the arrows to set which department comes first in the message. The HOD is tagged under their department.</p>
           </div>
-          {orderChanged && <button className="button-primary" disabled={saving === 'order'} onClick={() => void saveSettings('order', 'Department order saved.')}>{saving === 'order' ? 'Saving…' : 'Save order'}</button>}
+          {orderChanged && <div className="wa-unsaved"><span>Order changed</span><button className="button-primary" disabled={saving === 'order'} onClick={() => void saveSettings('order', 'Department order saved.')}>{saving === 'order' ? 'Saving…' : 'Save order'}</button></div>}
         </div>
 
         <div className="wa-order-strip" aria-label="Message order">
           <span className="wa-order-strip-label">Message order</span>
-          {orderedDepartments.map((dept, index) => <span key={dept} className="wa-order-chip"><b>{index + 1}</b>{dept}</span>)}
+          <div className="wa-order-chips">
+            {orderedDepartments.map((dept, index) => <span key={dept} className={`wa-order-chip ${index === 0 ? 'first' : ''}`}><b>{index + 1}</b>{dept}</span>)}
+          </div>
         </div>
 
         <ol className="wa-dept-list">
@@ -167,13 +184,13 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
             const dirty = draft.name !== (saved?.name ?? '') || draft.phone.replace(/\s/g, '') !== (saved?.phone ? displayPhone(saved.phone) : '').replace(/\s/g, '');
             return <li key={dept} className="wa-dept-card">
               <div className="wa-dept-rank">
-                <button type="button" title="Move up" aria-label={`Move ${dept} up`} disabled={index === 0} onClick={() => moveDepartment(index, -1)}><ArrowUp size={15} /></button>
+                <button type="button" title="Move up" aria-label={`Move ${dept} up`} disabled={index === 0} onClick={() => moveDepartment(index, -1)}><ChevronUp size={16} /></button>
                 <span>{index + 1}</span>
-                <button type="button" title="Move down" aria-label={`Move ${dept} down`} disabled={index === orderedDepartments.length - 1} onClick={() => moveDepartment(index, 1)}><ArrowDown size={15} /></button>
+                <button type="button" title="Move down" aria-label={`Move ${dept} down`} disabled={index === orderedDepartments.length - 1} onClick={() => moveDepartment(index, 1)}><ChevronDown size={16} /></button>
               </div>
               <div className="wa-dept-name">
                 <strong>{dept}</strong>
-                <small className={saved?.phone ? 'ok' : ''}>{saved?.phone ? `HOD: ${saved.name || displayPhone(saved.phone)}` : 'No HOD added'}</small>
+                <small className={saved?.phone ? 'ok' : ''}>{saved?.phone ? `HOD · ${saved.name || displayPhone(saved.phone)}` : 'No HOD yet'}</small>
               </div>
               <label className="wa-field">HOD name<input value={draft.name} placeholder="HOD name" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...draft, name: event.target.value } })} /></label>
               <label className="wa-field">Mobile<input inputMode="tel" value={draft.phone} placeholder="98765 43210" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...draft, phone: event.target.value } })} /></label>
@@ -183,7 +200,8 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
         </ol>
       </div>
 
-      <h3 className="wa-subheading">Employee mobile numbers <small>{withPhone} of {employees.length} added · employees without a number are listed by name only</small></h3>
+      <div className="wa-card">
+      <div className="wa-card-head"><div><h3>Employee mobile numbers <span className="wa-count">{withPhone} of {employees.length} added</span></h3><p>Employees without a number are listed by name only.</p></div></div>
       <label className="table-search wa-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, ID or department" /></label>
       <div className="table-scroll wa-phone-list"><table className="wa-table"><thead><tr><th>EMPLOYEE</th><th>DEPARTMENT</th><th>MOBILE</th><th /></tr></thead><tbody>
         {filtered.map((employee) => {
@@ -198,6 +216,7 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
         })}
         {!filtered.length && <tr><td className="empty-table" colSpan={4}>No employees match this search.</td></tr>}
       </tbody></table></div>
+      </div>
     </>}
   </section>;
 }
