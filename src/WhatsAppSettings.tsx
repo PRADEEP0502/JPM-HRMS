@@ -99,6 +99,7 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
   const saveHod = (department: string) => run(`hod-${department}`, async () => {
     const saved = await apiRequest<{ name: string; phone: string }>('/api/whatsapp/hods', auth, { method: 'PUT', body: JSON.stringify({ department, ...hodDrafts[department] }) });
     setHodDrafts((current) => ({ ...current, [department]: { name: saved.name, phone: saved.phone ? displayPhone(saved.phone) : '' } }));
+    setData((current) => current && { ...current, hods: { ...current.hods, [department]: { name: saved.name, phone: saved.phone } } });
   }, `HOD saved for ${department}.`);
   const savePhone = (employee: Employee) => run(`phone-${employee.id}`, async () => {
     const saved = await apiRequest<{ phone: string }>(`/api/employees/${encodeURIComponent(employee.id)}/phone`, auth, { method: 'PUT', body: JSON.stringify({ phone: phoneDrafts[employee.id] ?? '' }) });
@@ -145,23 +146,42 @@ export function WhatsAppSettings({ auth, employees }: { auth: string; employees:
       </div>
       {message && <p className={message.error ? 'form-error' : 'form-success'}>{message.text}</p>}
 
-      <div className="wa-subheading-row">
-        <h3 className="wa-subheading">Departments &amp; HODs <small>use ↑ ↓ to choose which department comes first in the message · HOD is tagged on their department’s lines</small></h3>
-        {orderChanged && <button className="button-primary" disabled={saving === 'order'} onClick={() => void saveSettings('order', 'Department order saved.')}>{saving === 'order' ? 'Saving…' : 'Save order'}</button>}
+      <div className="wa-section">
+        <div className="wa-section-head">
+          <div>
+            <h3>Department order &amp; HODs</h3>
+            <p>Use the arrows to choose which department comes first in the WhatsApp message. The HOD is tagged under their department.</p>
+          </div>
+          {orderChanged && <button className="button-primary" disabled={saving === 'order'} onClick={() => void saveSettings('order', 'Department order saved.')}>{saving === 'order' ? 'Saving…' : 'Save order'}</button>}
+        </div>
+
+        <div className="wa-order-strip" aria-label="Message order">
+          <span className="wa-order-strip-label">Message order</span>
+          {orderedDepartments.map((dept, index) => <span key={dept} className="wa-order-chip"><b>{index + 1}</b>{dept}</span>)}
+        </div>
+
+        <ol className="wa-dept-list">
+          {orderedDepartments.map((dept, index) => {
+            const saved = data.hods[dept];
+            const draft = hodDrafts[dept] ?? { name: '', phone: '' };
+            const dirty = draft.name !== (saved?.name ?? '') || draft.phone.replace(/\s/g, '') !== (saved?.phone ? displayPhone(saved.phone) : '').replace(/\s/g, '');
+            return <li key={dept} className="wa-dept-card">
+              <div className="wa-dept-rank">
+                <button type="button" title="Move up" aria-label={`Move ${dept} up`} disabled={index === 0} onClick={() => moveDepartment(index, -1)}><ArrowUp size={15} /></button>
+                <span>{index + 1}</span>
+                <button type="button" title="Move down" aria-label={`Move ${dept} down`} disabled={index === orderedDepartments.length - 1} onClick={() => moveDepartment(index, 1)}><ArrowDown size={15} /></button>
+              </div>
+              <div className="wa-dept-name">
+                <strong>{dept}</strong>
+                <small className={saved?.phone ? 'ok' : ''}>{saved?.phone ? `HOD: ${saved.name || displayPhone(saved.phone)}` : 'No HOD added'}</small>
+              </div>
+              <label className="wa-field">HOD name<input value={draft.name} placeholder="HOD name" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...draft, name: event.target.value } })} /></label>
+              <label className="wa-field">Mobile<input inputMode="tel" value={draft.phone} placeholder="98765 43210" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...draft, phone: event.target.value } })} /></label>
+              <button className="button-secondary wa-dept-save" disabled={!dirty || saving === `hod-${dept}`} onClick={() => void saveHod(dept)}>{saving === `hod-${dept}` ? 'Saving…' : 'Save'}</button>
+            </li>;
+          })}
+        </ol>
       </div>
-      <div className="table-scroll"><table className="wa-table"><thead><tr><th>ORDER</th><th>DEPARTMENT</th><th>HOD NAME</th><th>MOBILE</th><th /></tr></thead><tbody>
-        {orderedDepartments.map((dept, index) => <tr key={dept}>
-          <td className="wa-order">
-            <span>{index + 1}</span>
-            <button className="button-tertiary" title="Move up" aria-label={`Move ${dept} up`} disabled={index === 0} onClick={() => moveDepartment(index, -1)}><ArrowUp size={14} /></button>
-            <button className="button-tertiary" title="Move down" aria-label={`Move ${dept} down`} disabled={index === orderedDepartments.length - 1} onClick={() => moveDepartment(index, 1)}><ArrowDown size={14} /></button>
-          </td>
-          <td>{dept}</td>
-          <td><input value={hodDrafts[dept]?.name ?? ''} placeholder="HOD name" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...hodDrafts[dept], name: event.target.value } })} /></td>
-          <td><input inputMode="tel" value={hodDrafts[dept]?.phone ?? ''} placeholder="98765 43210" onChange={(event) => setHodDrafts({ ...hodDrafts, [dept]: { ...hodDrafts[dept], phone: event.target.value } })} /></td>
-          <td><button className="button-secondary" disabled={saving === `hod-${dept}`} onClick={() => void saveHod(dept)}>{saving === `hod-${dept}` ? '…' : 'Save'}</button></td>
-        </tr>)}
-      </tbody></table></div>
 
       <h3 className="wa-subheading">Employee mobile numbers <small>{withPhone} of {employees.length} added · employees without a number are listed by name only</small></h3>
       <label className="table-search wa-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, ID or department" /></label>
