@@ -10,3 +10,6 @@ output/
 *.xlsx
 *.xls
 .DS_Store
+
+# Office server: real settings never go into git
+settings.env
