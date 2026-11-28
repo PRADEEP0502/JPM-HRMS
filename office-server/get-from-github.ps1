@@ -5,8 +5,10 @@
 #   git clone https://github.com/PRADEEP0502/JPM-HRMS.git C:\JPM-HRMS-SRC
 #   powershell -ExecutionPolicy Bypass -File C:\JPM-HRMS-SRC\office-server\get-from-github.ps1
 # Every update after that: run only the second line again.
+# A "Download ZIP" copy from GitHub also works (run this file from inside it); it is then
+# not updated from GitHub automatically: for an update, download the ZIP again and run it from there.
 $ErrorActionPreference = 'Stop'
-$Src    = Split-Path -Parent $PSScriptRoot          # C:\JPM-HRMS-SRC (the GitHub copy)
+$Src    = Split-Path -Parent $PSScriptRoot          # the GitHub copy (git clone or ZIP download)
 $Root   = 'C:\JPM-HRMS-PY'                          # where the app runs
 $Stage  = 'C:\JPM-HRMS-PY-new'                      # new version is prepared here first
 $Git    = 'C:\Program Files\Git\cmd\git.exe'
@@ -26,20 +28,27 @@ if (-not ([Security.Principal.WindowsPrincipal]$id).IsInRole([Security.Principal
     Write-Bad 'Please run this in PowerShell opened with "Run as administrator".'; exit 1
 }
 
+$isClone = Test-Path (Join-Path $Src '.git')
+
 Write-Step '1. Tools'
-if (-not (Test-Path $Git)) { Write-Bad 'Git is not installed. Install it from git-scm.com (default options), then run again.'; exit 1 }
+if ($isClone -and -not (Test-Path $Git)) { Write-Bad 'Git is not installed. Install it from git-scm.com (default options), then run again.'; exit 1 }
 if (-not (Test-Path (Join-Path $NodeJs 'node.exe'))) { Write-Bad 'Node.js is not installed. Install the LTS version from nodejs.org (default options), then run again.'; exit 1 }
 $env:Path = "$NodeJs;" + $env:Path
-Write-Ok 'Git and Node.js found'
+Write-Ok 'Node.js found'
 
-Write-Step "2. Get the newest code from GitHub into $Src"
-if ((Invoke-Program $Git @('-C', $Src, 'pull', '--ff-only')) -ne 0) {
-    Write-Bad 'git pull failed (no internet, or GitHub sign-in needed). Nothing was changed.'; exit 1
+if ($isClone) {
+    Write-Step "2. Get the newest code from GitHub into $Src"
+    if ((Invoke-Program $Git @('-C', $Src, 'pull', '--ff-only')) -ne 0) {
+        Write-Bad 'git pull failed (no internet, or GitHub sign-in needed). Nothing was changed.'; exit 1
+    }
+    $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $commit = (& $Git -C $Src log -1 --format='%h %s' 2>&1 | Out-String).Trim()
+    $ErrorActionPreference = $old
+    Write-Ok "Code version: $commit"
+} else {
+    Write-Step "2. Using the downloaded copy in $Src"
+    Write-Ok 'ZIP download (no git): the code is used as it is'
 }
-$old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-$commit = (& $Git -C $Src log -1 --format='%h %s' 2>&1 | Out-String).Trim()
-$ErrorActionPreference = $old
-Write-Ok "Code version: $commit"
 
 Write-Step '3. Build the screens (first time takes a few minutes)'
 $code = Invoke-Program 'cmd.exe' @('/c', "cd /d `"$Src`" && npm ci --no-audit --no-fund")
