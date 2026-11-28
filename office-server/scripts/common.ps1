@@ -43,7 +43,7 @@ function Invoke-Program([string]$File, [string[]]$Arguments) {
 
 function Get-LanIp {
     $ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254*' -and $_.PrefixOrigin -ne 'WellKnown' } |
+        Where-Object { $_.IPAddress -match '^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)' -and $_.InterfaceAlias -notlike '*Tailscale*' } |
         Sort-Object InterfaceMetric | Select-Object -First 1
     if ($ip) { return $ip.IPAddress } else { return '<this PC IP>' }
 }
