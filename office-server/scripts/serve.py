@@ -93,7 +93,9 @@ def credentials_ok(header):
 
 def deny(start_response, status, message):
     body = json.dumps({'message': message}).encode()
-    start_response(status, [('Content-Type', 'application/json'), ('Content-Length', str(len(body)))])
+    # Same cross-site header as app.py, so the Vercel site can show the message too.
+    start_response(status, [('Content-Type', 'application/json'), ('Content-Length', str(len(body))),
+                            ('Access-Control-Allow-Origin', '*')])
     return [body]
 
 
