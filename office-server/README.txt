@@ -26,7 +26,7 @@ EVERY DAY
  Logs             C:\JPM-HRMS-PY\logs        (app.log, bot-*.log, backup.log; 14 days kept)
  Backups          C:\JPM-HRMS-PY\backups     (daily 01:30, newest 14 kept)
  Settings         Notepad "Run as administrator" > settings.env > then restart.ps1
- Internet off     & 'C:\Program Files\Tailscale\tailscale.exe' funnel --https=443 off
+ Internet off     & 'C:\Program Files\Tailscale\tailscale.exe' funnel --https=8443 off   (the port in the HRMS link)
 
 UPDATE (new package from the laptop)
  On the laptop:  powershell -ExecutionPolicy Bypass -File C:\HRAT\office-server\build-package.ps1

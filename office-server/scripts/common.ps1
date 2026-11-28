@@ -13,6 +13,18 @@ $Node       = 'C:\Program Files\nodejs\node.exe'
 $Npm        = 'C:\Program Files\nodejs\npm.cmd'
 $Tailscale  = 'C:\Program Files\Tailscale\tailscale.exe'
 
+# The https link that Tailscale Funnel sends to the app on port 8081 ('' when none), read from
+# "tailscale funnel status": each "https://name[:port] (Funnel on)" line is followed by its "proxy" lines.
+function Get-JpmFunnelUrl([string]$StatusText) {
+    $url = ''
+    foreach ($line in ($StatusText -split "`r?`n")) {
+        $head = [regex]::Match($line, '^\s*(https://[A-Za-z0-9.-]+\.ts\.net(:\d+)?)\s*\(')
+        if ($head.Success) { $url = $head.Groups[1].Value; continue }
+        if ($url -and $line -match 'proxy\s+http://(127\.0\.0\.1|localhost):8081\b') { return $url }
+    }
+    return ''
+}
+
 function Stop-JpmBot {
     Stop-ScheduledTask -TaskName $TaskBot -ErrorAction SilentlyContinue
     # Only the bot started as  node "C:\JPM-HRMS-PY\whatsapp-bot\bot.js"  (never another Node program).

@@ -21,9 +21,8 @@ try {
 
 Write-Step 'Internet link (Tailscale Funnel)'
 if (Test-Path $Tailscale) {
-    $funnel = (& $Tailscale funnel status 2>&1 | Out-String)
-    $url = ([regex]::Match($funnel, 'https://[A-Za-z0-9.-]+\.ts\.net')).Value
-    if ($url -and $funnel -match '8081') { Write-Ok $url } else { Write-Bad 'Funnel is not on for port 8081' }
+    $url = Get-JpmFunnelUrl (& $Tailscale serve status 2>&1 | Out-String)
+    if ($url) { Write-Ok $url } else { Write-Bad 'No internet link for HRMS (port 8081). Run funnel-admin.ps1.' }
 } else { Write-Bad 'Tailscale not installed' }
 
 Write-Step 'Last 5 lines of the WhatsApp bot log'
